@@ -132,6 +132,9 @@ def test_terraform_default_plan_is_cost_locked_and_non_deploying() -> None:
     main = (ROOT / "infrastructure/terraform/main.tf").read_text(encoding="utf-8")
     variables = (ROOT / "infrastructure/terraform/variables.tf").read_text(encoding="utf-8")
     plan_script = (ROOT / "scripts/terraform-plan-zero.sh").read_text(encoding="utf-8")
+    zero_plan_test = (
+        ROOT / "infrastructure/terraform/terraform-tests/zero-plan.tftest.hcl"
+    ).read_text(encoding="utf-8")
     workflow = (ROOT / ".github/workflows/ci.yaml").read_text(encoding="utf-8")
 
     resource_blocks = re.findall(r'resource "azurerm_[^}]+}', main, flags=re.DOTALL)
@@ -139,7 +142,9 @@ def test_terraform_default_plan_is_cost_locked_and_non_deploying() -> None:
     assert all(re.search(r"count\s*=\s*local\.deploy", block) for block in resource_blocks)
     assert 'data "azurerm_client_config" "current" {\n  count = local.deploy' in main
     assert "default     = false" in variables
-    assert "enable_deployment=false" in plan_script
+    assert 'mock_provider "azurerm"' in zero_plan_test
+    assert "command = plan" in zero_plan_test
+    assert "enable_deployment = false" in zero_plan_test
     assert "resource_changes}" in plan_script
     assert "terraform apply" not in plan_script
     assert "terraform-zero-resource-plan" in workflow
