@@ -1,0 +1,46 @@
+rules:
+  - id: python-dangerous-eval
+    languages: [python]
+    severity: ERROR
+    message: Dynamic code execution is prohibited in platform services.
+    pattern-either:
+      - pattern: eval(...)
+      - pattern: exec(...)
+
+  - id: python-unsafe-yaml-load
+    languages: [python]
+    severity: ERROR
+    message: Use yaml.safe_load for untrusted or repository-controlled YAML.
+    pattern: yaml.load(...)
+
+  - id: python-shell-true
+    languages: [python]
+    severity: ERROR
+    message: shell=True creates command-injection risk and is prohibited.
+    pattern: subprocess.$FUNC(..., shell=True, ...)
+
+  - id: python-insecure-tls
+    languages: [python]
+    severity: ERROR
+    message: TLS certificate verification must not be disabled.
+    pattern-either:
+      - pattern: requests.$METHOD(..., verify=False, ...)
+      - pattern: httpx.$METHOD(..., verify=False, ...)
+
+  - id: python-unsafe-pickle
+    languages: [python]
+    severity: ERROR
+    message: Pickle deserialization is prohibited for platform-controlled inputs.
+    pattern-either:
+      - pattern: pickle.load(...)
+      - pattern: pickle.loads(...)
+
+  - id: python-hardcoded-bearer-token
+    languages: [python]
+    severity: ERROR
+    message: Bearer tokens must come from an approved runtime secret provider.
+    patterns:
+      - pattern: $VALUE
+      - metavariable-regex:
+          metavariable: $VALUE
+          regex: '^["'']Bearer [A-Za-z0-9._~+/-]{16,}["'']$'

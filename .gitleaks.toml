@@ -1,0 +1,9 @@
+title = "Enterprise Agent Platform secret scanning"
+
+[allowlist]
+description = "Safe synthetic domains and documented Terraform cost acknowledgement"
+regexes = [
+  '''@novabank\.example''',
+  '''@example\.test''',
+  '''I_ACCEPT_AZURE_COSTS'''
+]

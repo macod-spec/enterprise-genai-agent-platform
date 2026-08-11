@@ -1,0 +1,12 @@
+name: payment-investigation
+version: 1.0.0
+description: Investigate synthetic payment status without executing a financial action.
+owner: {team: payments-platform, contact: payments-platform@novabank.example}
+agent: payments
+model: {provider: mock, model: deterministic-router-v1, max_input_tokens: 2000, max_output_tokens: 500}
+allowed_tools: [payments.get_transaction]
+data_classification: confidential
+approval: {required_for: [refund, resend, reversal], approver_role: payments.approver}
+slo: {availability_percent: 99.9, latency_p95_ms: 2000}
+evaluation: {suite: payment-investigation-v1, minimum_score: 0.95}
+governance_state: approved

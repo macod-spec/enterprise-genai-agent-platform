@@ -1,0 +1,80 @@
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "enterprise-genai-agent-platform"
+version = "0.1.0"
+description = "A secure, local-first enterprise GenAI agent platform"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.12,<3.14"
+dependencies = [
+  "fastapi>=0.116,<1",
+  "langgraph>=1.0,<2",
+  "mcp>=1.29,<2",
+  "msgpack>=1.2.1,<2",
+  "opentelemetry-api>=1.44,<2",
+  "opentelemetry-sdk>=1.44,<2",
+  "opentelemetry-instrumentation-fastapi>=0.65b0,<1",
+  "opentelemetry-exporter-otlp-proto-grpc>=1.44,<2",
+  "pydantic-settings>=2.10,<3",
+  "PyJWT[crypto]>=2.10,<3",
+  "prometheus-client>=0.22,<1",
+  "pg8000>=1.31,<2",
+  "PyYAML>=6.0.3,<7",
+  "redis>=6.4,<7",
+  "uvicorn[standard]>=0.35,<1",
+]
+
+[project.optional-dependencies]
+dev = [
+  "bandit[toml]>=1.8,<2",
+  "detect-secrets>=1.5,<2",
+  "mypy>=1.15,<2",
+  "pip-audit>=2.8,<3",
+  "pip-licenses>=5.0,<6",
+  "pre-commit>=4.1,<5",
+  "pytest>=9.0.3,<10",
+  "pytest-cov>=6,<7",
+  "httpx>=0.28,<1",
+  "ruff>=0.11,<1",
+  "types-PyYAML>=6.0.12,<7",
+  "uv>=0.12,<1",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/enterprise_genai_platform"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+extend-exclude = [".venv"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "S", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["S101"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unreachable = true
+exclude = "(^|/)([.]venv|build|dist)/"
+
+[tool.pytest.ini_options]
+addopts = "--strict-config --strict-markers --cov --cov-report=term-missing --cov-fail-under=80"
+testpaths = ["tests"]
+
+[tool.bandit]
+exclude_dirs = [".venv", "tests"]
+skips = []
+
+[tool.coverage.run]
+branch = true
+source = ["src"]
+
+[tool.coverage.report]
+show_missing = true
+skip_empty = true

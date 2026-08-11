@@ -1,0 +1,12 @@
+name: change-me-agent
+version: 0.1.0
+description: CHANGE_ME with the bounded business capability and prohibited actions.
+owner: {team: change-me-team, contact: change-me-team@novabank.example}
+agent: policy
+model: {provider: mock, model: deterministic-router-v1, max_input_tokens: 2000, max_output_tokens: 500}
+allowed_tools: []
+data_classification: internal
+approval: {required_for: [CHANGE_ME], approver_role: change-me.approver}
+slo: {availability_percent: 99.0, latency_p95_ms: 5000}
+evaluation: {suite: change-me-v1, minimum_score: 0.90}
+governance_state: draft

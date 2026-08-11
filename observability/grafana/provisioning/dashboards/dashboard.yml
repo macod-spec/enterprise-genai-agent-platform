@@ -1,0 +1,6 @@
+apiVersion: 1
+providers:
+  - name: Agent Platform
+    folder: Enterprise AI
+    type: file
+    options: {path: /var/lib/grafana/dashboards}

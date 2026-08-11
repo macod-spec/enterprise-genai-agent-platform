@@ -1,0 +1,33 @@
+minimum_pre_commit_version: "4.1.0"
+default_install_hook_types: [pre-commit, pre-push]
+
+repos:
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: Ruff lint
+        entry: .venv/bin/ruff check --fix
+        language: system
+        types: [python]
+      - id: ruff-format
+        name: Ruff format
+        entry: .venv/bin/ruff format
+        language: system
+        types: [python]
+      - id: detect-secrets
+        name: Detect secrets
+        entry: .venv/bin/detect-secrets-hook
+        language: system
+        stages: [pre-commit, pre-push]
+      - id: bandit
+        name: Bandit security scan
+        entry: .venv/bin/bandit -c pyproject.toml
+        language: system
+        types: [python]
+        exclude: ^tests/
+      - id: pytest
+        name: Unit tests
+        entry: .venv/bin/pytest
+        language: system
+        pass_filenames: false
+        stages: [pre-push]

@@ -1,0 +1,247 @@
+"""API and security-control tests for the local agent gateway."""
+
+import json
+import logging
+
+import pytest
+from fastapi.testclient import TestClient
+from pydantic import ValidationError
+
+from enterprise_genai_platform.gateway.app import create_app
+from enterprise_genai_platform.gateway.config import Settings
+from enterprise_genai_platform.gateway.logging import JsonFormatter, redact
+
+
+def settings(**overrides: object) -> Settings:
+    """Create deterministic settings without reading a developer's local .env file."""
+    values: dict[str, object] = {
+        "app_env": "test",
+        "cors_allowed_origins": ["http://localhost:3000"],
+        "rate_limit_requests": 10,
+    }
+    values.update(overrides)
+    return Settings.model_validate(values)
+
+
+def test_health_endpoints_are_public_and_secure() -> None:
+    client = TestClient(create_app(settings()))
+
+    live = client.get("/health/live", headers={"X-Request-ID": "known-request-1"})
+    ready = client.get("/health/ready")
+
+    assert live.status_code == 200
+    assert live.json() == {"status": "ok"}
+    assert ready.json() == {"status": "ready", "checks": {"gateway": "ready"}}
+    assert live.headers["x-request-id"] == "known-request-1"
+    assert live.headers["x-content-type-options"] == "nosniff"
+    assert live.headers["x-frame-options"] == "DENY"
+    assert live.headers["cache-control"] == "no-store"
+    assert live.headers["content-security-policy"] == "default-src 'none'; frame-ancestors 'none'"
+
+
+def test_invalid_request_id_is_replaced() -> None:
+    client = TestClient(create_app(settings()))
+
+    response = client.get("/health/live", headers={"X-Request-ID": "contains spaces"})
+
+    assert response.status_code == 200
+    assert response.headers["x-request-id"] != "contains spaces"
+
+
+def test_protected_route_requires_identity() -> None:
+    client = TestClient(create_app(settings()))
+
+    response = client.get("/api/v1/platform/info")
+
+    assert response.status_code == 401
+    assert response.headers["www-authenticate"] == "Local"
+
+
+def test_protected_route_requires_role() -> None:
+    client = TestClient(create_app(settings()))
+
+    response = client.get(
+        "/api/v1/platform/info",
+        headers={"X-Local-User": "developer", "X-Local-Roles": "agent.reader"},
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Caller does not have the required role"
+
+
+def test_authorized_local_identity_can_read_platform_info() -> None:
+    client = TestClient(create_app(settings()))
+
+    response = client.get(
+        "/api/v1/platform/info",
+        headers={"X-Local-User": "developer", "X-Local-Roles": "platform.viewer"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["authenticated_subject"] == "developer"
+    assert response.json()["environment"] == "test"
+
+
+def test_authorized_caller_can_route_workflow_locally() -> None:
+    client = TestClient(create_app(settings()))
+
+    response = client.post(
+        "/api/v1/workflows/route",
+        headers={"X-Local-User": "developer", "X-Local-Roles": "agent.invoke"},
+        json={"query": "Why did this payment fail?"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "decision": {
+            "route": "payments",
+            "reason": "The request matched payments domain terminology.",
+            "confidence": 0.7,
+            "requires_human_approval": False,
+        },
+        "steps": 1,
+        "error_code": None,
+    }
+
+
+def test_workflow_route_requires_invoke_role_and_valid_query() -> None:
+    client = TestClient(create_app(settings()))
+
+    forbidden = client.post(
+        "/api/v1/workflows/route",
+        headers={"X-Local-User": "developer", "X-Local-Roles": "platform.viewer"},
+        json={"query": "Find a payment"},
+    )
+    invalid = client.post(
+        "/api/v1/workflows/route",
+        headers={"X-Local-User": "developer", "X-Local-Roles": "agent.invoke"},
+        json={"query": "   "},
+    )
+
+    assert forbidden.status_code == 403
+    assert invalid.status_code == 422
+
+
+def test_authorized_caller_can_run_synthetic_investigation() -> None:
+    app = create_app(settings())
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/v1/workflows/investigate",
+        headers={
+            "X-Local-User": "developer",
+            "X-Local-Roles": "agent.invoke",
+            "X-Request-ID": "investigation-123",
+        },
+        json={"query": "Why is CUST-1098 payment transaction TXN-5001 delayed?"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["decision"]["route"] == "payments"
+    assert payload["result"]["agent"] == "payments"
+    assert payload["result"]["evidence"][0]["source_id"] == "TXN-5001"
+    assert payload["steps"] == 2
+    audit = app.state.mcp_gateway.audit.records[-1]
+    assert audit.subject == "developer"
+    assert audit.agent == "payments"
+    assert audit.request_id == "investigation-123"
+
+
+def test_investigation_endpoint_prevents_high_risk_execution() -> None:
+    client = TestClient(create_app(settings()))
+
+    response = client.post(
+        "/api/v1/workflows/investigate",
+        headers={"X-Local-User": "developer", "X-Local-Roles": "agent.invoke"},
+        json={"query": "Send a refund of £750 for TXN-5001"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["result"]["agent"] == "human_review"
+    assert response.json()["result"]["requires_human_approval"] is True
+
+
+def test_local_headers_are_rejected_outside_local_or_test() -> None:
+    client = TestClient(create_app(settings(app_env="development")))
+
+    response = client.get(
+        "/api/v1/platform/info",
+        headers={"X-Local-User": "developer", "X-Local-Roles": "platform.viewer"},
+    )
+
+    assert response.status_code == 503
+    assert client.get("/docs").status_code == 404
+    assert client.get("/openapi.json").status_code == 404
+
+
+def test_request_body_limit_is_enforced_before_route_handling() -> None:
+    client = TestClient(create_app(settings(max_request_body_bytes=1_024)))
+
+    response = client.request(
+        "POST",
+        "/does-not-exist",
+        content=b"x" * 1_025,
+        headers={"Content-Type": "application/octet-stream"},
+    )
+
+    assert response.status_code == 413
+
+
+def test_rate_limit_is_applied_per_authenticated_subject() -> None:
+    client = TestClient(create_app(settings(rate_limit_requests=1)))
+    headers = {"X-Local-User": "developer", "X-Local-Roles": "platform.viewer"}
+
+    assert client.get("/api/v1/platform/info", headers=headers).status_code == 200
+    limited = client.get("/api/v1/platform/info", headers=headers)
+
+    assert limited.status_code == 429
+    assert limited.headers["retry-after"] == "60"
+
+
+def test_cors_allows_only_configured_origin() -> None:
+    client = TestClient(create_app(settings()))
+
+    allowed = client.options(
+        "/api/v1/platform/info",
+        headers={
+            "Origin": "http://localhost:3000",
+            "Access-Control-Request-Method": "GET",
+        },
+    )
+    denied = client.options(
+        "/api/v1/platform/info",
+        headers={
+            "Origin": "https://attacker.example",
+            "Access-Control-Request-Method": "GET",
+        },
+    )
+
+    assert allowed.status_code == 200
+    assert allowed.headers["access-control-allow-origin"] == "http://localhost:3000"
+    assert "access-control-allow-origin" not in denied.headers
+
+
+def test_wildcard_cors_configuration_is_rejected() -> None:
+    with pytest.raises(ValidationError, match="Wildcard CORS origins are not permitted"):
+        settings(cors_allowed_origins=["*"])
+
+
+def test_structured_logging_redacts_sensitive_fields() -> None:
+    # fmt: off
+    sensitive_fields = {"token": "x", "nested": {"password": "x"}}  # pragma: allowlist secret
+    # fmt: on
+    assert redact(sensitive_fields) == {
+        "token": "[REDACTED]",  # pragma: allowlist secret
+        "nested": {"password": "[REDACTED]"},  # pragma: allowlist secret
+    }
+
+    record = logging.LogRecord("gateway", logging.INFO, "", 0, "event", (), None)
+    record.event_fields = {  # pragma: allowlist secret
+        "request_id": "request-1",
+        "authorization": "private",
+    }
+    payload = json.loads(JsonFormatter().format(record))
+
+    assert payload["request_id"] == "request-1"
+    assert payload["authorization"] == "[REDACTED]"

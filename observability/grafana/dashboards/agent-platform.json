@@ -1,0 +1,14 @@
+{
+  "title": "Enterprise Agent Platform",
+  "uid": "enterprise-agent-platform",
+  "schemaVersion": 39,
+  "refresh": "30s",
+  "panels": [
+    {"type":"stat","title":"Request rate","targets":[{"expr":"sum(rate(agent_platform_http_requests_total[5m]))"}],"gridPos":{"h":8,"w":6,"x":0,"y":0}},
+    {"type":"timeseries","title":"Workflow p95 latency","targets":[{"expr":"histogram_quantile(0.95, sum by (le) (rate(agent_platform_workflow_duration_seconds_bucket[5m])))"}],"gridPos":{"h":8,"w":9,"x":6,"y":0}},
+    {"type":"timeseries","title":"MCP outcomes","targets":[{"expr":"sum by (tool, outcome) (rate(agent_platform_mcp_calls_total[5m]))"}],"gridPos":{"h":8,"w":9,"x":15,"y":0}},
+    {"type":"stat","title":"Pending approvals","targets":[{"expr":"agent_platform_pending_approvals"}],"gridPos":{"h":8,"w":6,"x":0,"y":8}},
+    {"type":"timeseries","title":"RAG retrievals","targets":[{"expr":"sum by (result) (rate(agent_platform_rag_retrievals_total[5m]))"}],"gridPos":{"h":8,"w":9,"x":6,"y":8}},
+    {"type":"timeseries","title":"Estimated model tokens","targets":[{"expr":"sum by (provider, direction) (rate(agent_platform_model_tokens_total[5m]))"}],"gridPos":{"h":8,"w":9,"x":15,"y":8}}
+  ]
+}
