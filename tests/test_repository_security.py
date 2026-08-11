@@ -141,6 +141,32 @@ def test_codeql_retains_results_without_advanced_security() -> None:
     assert "if-no-files-found: error" in workflow
 
 
+def test_destroy_is_account_locked_reviewed_and_never_automatic() -> None:
+    """Teardown must require an exact target, reviewed plan and confirmation."""
+    makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+    destroy = (ROOT / "scripts/terraform-connected-destroy.sh").read_text(encoding="utf-8")
+
+    assert "destroy:" in makefile
+    assert 'EXPECTED_SUBSCRIPTION="5677d45c-bce1-4375-ba74-7443b6a2a74c"' in destroy
+    assert 'EXPECTED_TENANT="04ed1ea3-6db7-4f0d-8551-cf860495341d"' in destroy
+    assert 'REQUIRED_CONFIRMATION="DELETE_${PLATFORM_RESOURCE_GROUP}"' in destroy
+    assert "plan -destroy" in destroy
+    assert '"${create_count}" != "0"' in destroy
+    assert "DESTROY_DRY_RUN:-0" in destroy
+    assert "apply -input=false -auto-approve" in destroy
+
+
+def test_environment_age_guard_warns_without_cloud_credentials() -> None:
+    """The hourly cost guard must use a non-secret timestamp and deduplicate alerts."""
+    workflow = (ROOT / ".github/workflows/environment-age.yaml").read_text(encoding="utf-8")
+
+    assert 'cron: "17 * * * *"' in workflow
+    assert "AZURE_ENV_CREATED_AT" in workflow
+    assert "issues: write" in workflow
+    assert "gh issue list --state open" in workflow
+    assert "az login" not in workflow
+
+
 def test_terraform_default_plan_is_cost_locked_and_non_deploying() -> None:
     """Every Azure lookup and resource must be absent from the default plan."""
     main = (ROOT / "infrastructure/terraform/main.tf").read_text(encoding="utf-8")
