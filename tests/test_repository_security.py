@@ -125,6 +125,17 @@ def test_kind_integration_enforces_security_and_cleanup() -> None:
     assert "kind delete cluster" in kind_script
     assert "trap cleanup EXIT" in kind_script
     assert "allowPrivilegeEscalation == false" in kind_script
+    assert 'kind-metrics.prom"' in kind_script
+    assert "curl --fail --silent http://127.0.0.1:18001/metrics | grep -q" not in kind_script
+
+
+def test_codeql_has_permissions_to_publish_results() -> None:
+    """CodeQL needs read access to workflow metadata and write access to SARIF."""
+    workflow = (ROOT / ".github/workflows/codeql.yaml").read_text(encoding="utf-8")
+
+    assert "actions: read" in workflow
+    assert "contents: read" in workflow
+    assert "security-events: write" in workflow
 
 
 def test_terraform_default_plan_is_cost_locked_and_non_deploying() -> None:

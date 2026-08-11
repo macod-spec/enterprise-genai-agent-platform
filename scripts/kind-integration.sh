@@ -66,7 +66,9 @@ done
 
 curl --fail --silent http://127.0.0.1:18001/health/live | jq -e '.status == "ok"'
 curl --fail --silent http://127.0.0.1:18001/health/ready | jq -e '.status == "ready"'
-curl --fail --silent http://127.0.0.1:18001/metrics | grep -q '^agent_platform_http_requests_total'
+curl --fail --silent http://127.0.0.1:18001/metrics \
+  --output "${REPORT_DIR}/kind-metrics.prom"
+grep -q '^agent_platform_http_requests_total' "${REPORT_DIR}/kind-metrics.prom"
 
 jq -e '
   .spec.template.spec.automountServiceAccountToken == false and
