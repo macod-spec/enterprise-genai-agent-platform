@@ -2,7 +2,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from scripts.environment_age_check import parse_utc
+from enterprise_genai_platform.cost_control import parse_utc
 
 
 def test_parse_utc_normalises_an_offset() -> None:

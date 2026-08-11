@@ -1,1 +1,0 @@
-"""Testable operational automation helpers."""

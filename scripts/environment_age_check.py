@@ -8,12 +8,7 @@ import os
 from datetime import UTC, datetime
 from pathlib import Path
 
-
-def parse_utc(value: str) -> datetime:
-    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-    if parsed.tzinfo is None:
-        raise ValueError("timestamp must include a timezone")
-    return parsed.astimezone(UTC)
+from enterprise_genai_platform.cost_control import parse_utc
 
 
 def main() -> int:
