@@ -23,7 +23,7 @@ dependencies = [
   "prometheus-client>=0.22,<1",
   "pg8000>=1.31,<2",
   "PyYAML>=6.0.3,<7",
-  "redis>=6.4,<7",
+  "redis>=6.4,<9",
   "uvicorn[standard]>=0.35,<1",
 ]
 
