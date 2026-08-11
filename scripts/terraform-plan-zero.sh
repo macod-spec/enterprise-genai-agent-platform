@@ -6,18 +6,30 @@ terraform_root="${repo_root}/infrastructure/terraform"
 report_root="${repo_root}/.security-reports"
 temporary_root="$(mktemp -d)"
 trap 'rm -rf -- "${temporary_root}"' EXIT
+isolated_root="${temporary_root}/terraform"
 
 mkdir -p "${report_root}"
-terraform -chdir="${terraform_root}" fmt -check -recursive
-terraform -chdir="${terraform_root}" init -backend=false -input=false
-terraform -chdir="${terraform_root}" validate
-terraform -chdir="${terraform_root}" plan \
+mkdir -p "${isolated_root}"
+for terraform_file in "${terraform_root}"/*.tf; do
+  if [[ "$(basename "${terraform_file}")" != "backend.tf" ]]; then
+    cp "${terraform_file}" "${isolated_root}/"
+  fi
+done
+cp "${terraform_root}/.terraform.lock.hcl" "${isolated_root}/"
+cp -R "${terraform_root}/modules" "${isolated_root}/modules"
+
+# Always plan in an isolated copy. A prior connected init in the working tree
+# must never cause this offline gate to read live remote state.
+terraform -chdir="${isolated_root}" fmt -check -recursive
+terraform -chdir="${isolated_root}" init -backend=false -input=false
+terraform -chdir="${isolated_root}" validate
+terraform -chdir="${isolated_root}" plan \
   -refresh=false \
   -lock=false \
   -input=false \
   -var='enable_deployment=false' \
   -out="${temporary_root}/zero-resource.tfplan"
-terraform -chdir="${terraform_root}" show -json \
+terraform -chdir="${isolated_root}" show -json \
   "${temporary_root}/zero-resource.tfplan" > "${temporary_root}/zero-resource-plan.json"
 
 resource_changes="$(jq '[.resource_changes[]? | select(.change.actions != ["no-op"])] | length' \
