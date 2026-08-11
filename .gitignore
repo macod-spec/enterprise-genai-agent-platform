@@ -30,7 +30,7 @@ crash.log
 *.log
 
 # Local data
-data/
+/data/
 
 # Security scanner output
 .security-reports/
