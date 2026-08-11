@@ -167,6 +167,15 @@ def test_environment_age_guard_warns_without_cloud_credentials() -> None:
     assert "az login" not in workflow
 
 
+def test_durable_state_waits_for_authenticated_connectivity() -> None:
+    """Container health must be followed by bounded host-side connection retries."""
+    verifier = (ROOT / "scripts/verify-durable-state.py").read_text(encoding="utf-8")
+
+    assert "def wait_until_connectable" in verifier
+    assert "attempts: int = 10" in verifier
+    assert "time.sleep(1)" in verifier
+
+
 def test_terraform_default_plan_is_cost_locked_and_non_deploying() -> None:
     """Every Azure lookup and resource must be absent from the default plan."""
     main = (ROOT / "infrastructure/terraform/main.tf").read_text(encoding="utf-8")

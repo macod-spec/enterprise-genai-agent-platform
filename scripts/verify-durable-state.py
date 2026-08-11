@@ -1,6 +1,7 @@
 """Exercise persistence and atomic decisions against local durable backends."""
 
 import os
+import time
 from collections.abc import Callable
 
 from enterprise_genai_platform.state import (
@@ -8,6 +9,20 @@ from enterprise_genai_platform.state import (
     PostgreSQLApprovalStore,
     RedisApprovalStore,
 )
+
+
+def wait_until_connectable(factory: Callable[[], ApprovalStore], attempts: int = 10) -> None:
+    """Wait for an authenticated host-side connection, not only container health."""
+    last_error: Exception | None = None
+    for _ in range(attempts):
+        try:
+            store = factory()
+            store.close()
+            return
+        except Exception as error:  # noqa: BLE001 - readiness retries transport failures
+            last_error = error
+            time.sleep(1)
+    raise RuntimeError("durable backend did not become connectable") from last_error
 
 
 def verify(factory: Callable[[], ApprovalStore]) -> None:
@@ -51,8 +66,17 @@ def verify(factory: Callable[[], ApprovalStore]) -> None:
 def main() -> None:
     postgres_url = os.environ["POSTGRES_STATE_URL"]
     redis_url = os.environ["REDIS_STATE_URL"]
-    verify(lambda: PostgreSQLApprovalStore(postgres_url))
-    verify(lambda: RedisApprovalStore(redis_url))
+
+    def postgres_factory() -> PostgreSQLApprovalStore:
+        return PostgreSQLApprovalStore(postgres_url)
+
+    def redis_factory() -> RedisApprovalStore:
+        return RedisApprovalStore(redis_url)
+
+    wait_until_connectable(postgres_factory)
+    wait_until_connectable(redis_factory)
+    verify(postgres_factory)
+    verify(redis_factory)
     print("PostgreSQL and Redis durable-state integration passed")
 
 
