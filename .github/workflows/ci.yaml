@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with: {persist-credentials: false}
       - uses: actions/setup-python@v5
         with: {python-version: "3.13", cache: pip}
@@ -40,7 +40,7 @@ jobs:
     timeout-minutes: 10
     container: semgrep/semgrep:1.172.0@sha256:65dcd4408adda7c183a6b4550cb1e9b19f7f627a6fbb7e0559bd466bedc44d7b
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with: {persist-credentials: false}
       - run: semgrep scan --config .semgrep.yml --error --metrics off
 
@@ -51,7 +51,7 @@ jobs:
       contents: read
       pull-requests: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with: {fetch-depth: 0, persist-credentials: false}
       - uses: gitleaks/gitleaks-action@v2
         env:
@@ -61,7 +61,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with: {persist-credentials: false}
       - uses: aquasecurity/trivy-action@v0.36.0
         with:
@@ -75,7 +75,7 @@ jobs:
     timeout-minutes: 10
     permissions: {contents: read}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with: {persist-credentials: false}
       - uses: hashicorp/setup-terraform@v3
         with: {terraform_version: "1.15.6", terraform_wrapper: false}
@@ -87,7 +87,7 @@ jobs:
     timeout-minutes: 15
     permissions: {contents: read}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with: {persist-credentials: false}
       - uses: docker/setup-buildx-action@v3
       - uses: docker/build-push-action@v6
@@ -108,7 +108,7 @@ jobs:
     timeout-minutes: 25
     permissions: {contents: read}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with: {persist-credentials: false}
       - uses: docker/setup-buildx-action@v3
       - uses: azure/setup-helm@v4
@@ -121,7 +121,7 @@ jobs:
     timeout-minutes: 15
     permissions: {contents: read}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with: {persist-credentials: false}
       - uses: actions/setup-python@v5
         with: {python-version: "3.13", cache: pip}
