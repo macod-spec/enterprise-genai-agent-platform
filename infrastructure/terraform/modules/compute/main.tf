@@ -9,6 +9,7 @@ resource "azurerm_kubernetes_cluster" "platform" {
   name                              = "aks-${var.name}"
   location                          = var.location
   resource_group_name               = var.resource_group_name
+  dns_prefix                        = "aks-${var.name}"
   private_cluster_enabled           = true
   private_dns_zone_id               = "System"
   local_account_disabled            = true
