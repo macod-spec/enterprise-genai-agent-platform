@@ -1,11 +1,11 @@
-FROM python:3.13-slim AS builder
+FROM python:3.14-slim AS builder
 WORKDIR /build
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_NO_CACHE_DIR=1
 COPY pyproject.toml README.md ./
 COPY src ./src
 RUN python -m pip wheel --wheel-dir /wheels .
 
-FROM python:3.13-slim AS runtime
+FROM python:3.14-slim AS runtime
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PATH=/opt/venv/bin:$PATH
 RUN groupadd --system --gid 10001 app && useradd --system --uid 10001 --gid app app
 WORKDIR /app
