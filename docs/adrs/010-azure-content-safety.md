@@ -61,11 +61,13 @@ matching the PII guard's audit discipline.
   intended trade-off for a safety control but should be revisited if it
   proves too strict in practice (e.g. a circuit breaker that fails open after
   sustained provider errors, with loud alerting).
-- `AzureContentSafetyProvider` has not been exercised against a live Azure
-  Content Safety resource in this session — no such resource exists in the
-  current sandbox, and Terraform does not yet provision one. Implemented but
-  unverified against a live endpoint, same status as the Azure OpenAI
-  adapter (ADR-006).
+- `AzureContentSafetyProvider` is now live-verified (2026-08-12): a
+  free-tier (F0) `cs-novabank-ai-dev` account was created directly (outside
+  Terraform, which does not yet provision one), and a benign string scored
+  0 across all four categories while a harmful string was correctly flagged
+  and blocked. Full detail in `docs/portfolio/live-verification.md`. No
+  adapter bugs were found — the only one of the three live-verified Azure
+  adapters that worked correctly on the first real call.
 
 ## Alternatives considered
 
