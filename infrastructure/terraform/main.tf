@@ -60,15 +60,19 @@ resource "azurerm_log_analytics_workspace" "platform" {
 }
 
 resource "azurerm_container_registry" "platform" {
-  count                         = local.deploy
-  name                          = replace("acr${local.name}", "-", "")
-  resource_group_name           = azurerm_resource_group.platform[0].name
-  location                      = azurerm_resource_group.platform[0].location
-  sku                           = "Premium"
-  admin_enabled                 = false
-  public_network_access_enabled = false
+  count               = local.deploy
+  name                = replace("acr${local.name}", "-", "")
+  resource_group_name = azurerm_resource_group.platform[0].name
+  location            = azurerm_resource_group.platform[0].location
+  sku                 = "Premium"
+  admin_enabled       = false
+  # Originally false (private-only). GitHub-hosted CD runners have no route
+  # into the private VNet, so ADR-014 opened both together (Azure couples
+  # them: export_policy cannot stay disabled while public access is on) with
+  # AAD/RBAC (admin_enabled=false, no key-based auth) as the real gate.
+  public_network_access_enabled = true
   anonymous_pull_enabled        = false
-  export_policy_enabled         = false
+  export_policy_enabled         = true
   network_rule_bypass_option    = "None"
   # Docker Content Trust is deprecated for ACR; delivery uses Notation signing.
   trust_policy_enabled = false
