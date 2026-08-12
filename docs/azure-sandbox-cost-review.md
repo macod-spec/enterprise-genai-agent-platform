@@ -22,6 +22,12 @@ before disks, networking, monitoring or any other platform service. That lower b
 already exceeds the Terraform default budget of GBP 50, so a non-zero plan is
 blocked—not merely awaiting execution.
 
+The system node size is configurable through `aks_system_node_vm_size`, but the
+guardrails deliberately refuse B-series sizes for the AKS system pool. They are
+cheap, but not an acceptable system-pool target for this platform. Any lower-cost
+substitution must be a supported non-B-series SKU and must pass the live Azure
+SKU/quota preflight immediately before apply.
+
 The sanitised query result and calculation are recorded in
 `config/azure-retail-price-snapshot.json`. The API provides public retail prices
 without subscription discounts; a complete calculator export remains mandatory.
@@ -56,6 +62,9 @@ profile, then obtain owner approval.
 7. Required tags for owner, environment, classification, cost centre and expiry.
 8. CI separation: plan may be reviewed, but apply requires a protected environment
    and explicit human approval.
+9. AKS preflight: the active subscription must no longer report Free Trial quota
+   or an active spending limit, the target region must return compute quota entries,
+   and the chosen system node SKU must be available and unrestricted.
 
 The `monthly_budget_gbp` variable feeds a validate-only budget resource with 50%,
 80% and 100% notifications. An enabled plan still requires reviewed alert recipients

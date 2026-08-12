@@ -38,12 +38,16 @@
 - Current critical path: Phase 2 model gateway, token/cost and GenAI OpenTelemetry
   telemetry, self-hosted Langfuse, Presidio/Content Safety, groundedness evaluation,
   and real hybrid RAG with entitlement filtering against Azure AI Search.
-- Deferred external dependency: the new Free Trial subscription reports no compute
-  quota in tested regions/SKU families. Upgrade to Pay-As-You-Go and request a small
-  VM-family quota before retrying AKS. Until then, Argo CD, Kyverno and workload
-  identity are demonstrated on `kind`; AKS Terraform remains validated and ready.
-- In progress: publish the sanitized repository and enable GitHub-hosted CodeQL and
-  branch protection. The partially created Azure sandbox is billable and is not yet
+- Completed with explicit approval: published the sanitized repository, enabled
+  GitHub-hosted CodeQL/code scanning and restored protected `main` branch controls.
+- Completed locally: AKS connected-apply preflight blocks Free Trial quota,
+  active spending limits, missing compute quota, restricted node SKUs and B-series
+  system pools before Terraform can apply.
+- Deferred external dependency: the upgraded subscription must stop reporting
+  Free Trial quota/spending-limit state and expose regional VM-family quota before
+  retrying AKS. Until then, Argo CD, Kyverno and workload identity are demonstrated
+  on `kind`; AKS Terraform remains validated and ready.
+- In progress: the partially created Azure sandbox is billable and is not yet
   application-ready.
 - Pre-production: Entra identity, durable PostgreSQL/Redis state, remote MCP auth,
   managed secrets, load/failure tests and external penetration test.

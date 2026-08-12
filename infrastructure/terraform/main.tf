@@ -124,6 +124,8 @@ module "compute" {
   resource_group_name    = azurerm_resource_group.platform[0].name
   subnet_id              = azurerm_subnet.aks[0].id
   admin_group_object_ids = var.aks_admin_group_object_ids
+  system_node_vm_size    = var.aks_system_node_vm_size
+  system_node_count      = var.aks_system_node_count
   tags                   = local.tags
 }
 

@@ -7,7 +7,7 @@ and variable consumption. Actual subscription billing is authoritative.
 
 | Terraform component | Assumption | Estimated GBP/month |
 |---|---:|---:|
-| AKS system node | 1 × Linux `Standard_D2s_v5`, £0.0841/hour; AKS Free control plane | £61.39 |
+| AKS system node | 1 × Linux `Standard_D2s_v5`, £0.0841/hour; AKS Free control plane; size is configurable but must remain a non-B-series AKS system-pool SKU | £61.39 |
 | Azure AI Search | Basic, 1 search unit, £0.0765/hour | £55.85 |
 | Container Registry | Premium registry unit, £1.2626/day | £38.40 |
 | Managed Redis | `Balanced_B1`, one non-HA node, £0.0280/hour | £20.44 |
@@ -37,6 +37,12 @@ resource should run continuously during portfolio development.
 | Active development only | Azure OpenAI account/deployments, Basic AI Search and PostgreSQL | Create only while developing or demonstrating the real model and RAG path. OpenAI is consumption based; Search and PostgreSQL accrue standing charges. Destroy after an inactive work period. |
 | Demo week only | ACR, Managed Redis, AKS, private endpoints/DNS links, Log Analytics and Application Insights | Re-create from Terraform for the managed-platform demonstration, collect evidence, then destroy immediately. Local Compose and `kind` are the normal development runtime. |
 | Configuration only until quota clears | AKS and workload identity federation | Keep Terraform, Helm, policy tests and `kind` evidence ready. Do not make AKS a dependency of Phase 2 application work. |
+
+The connected apply path runs `scripts/azure-aks-preflight.sh` before Terraform
+can apply. That preflight refuses the target if Azure still reports Free Trial
+quota, an active spending limit, no regional compute quota entries, an unavailable
+VM SKU, or a B-series AKS system node pool. This keeps the Pay-As-You-Go sandbox
+from starting a partial deployment that cannot create AKS cleanly.
 
 The platform resource group is deliberately disposable. Data required after its
 destruction must be exported to an approved non-production evidence location; the
