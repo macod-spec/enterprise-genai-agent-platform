@@ -12,9 +12,18 @@ processors:
       - {key: http.request.header.cookie, action: delete}
 exporters:
   debug: {verbosity: basic}
+  # Fed to self-hosted Langfuse per ADR-007. Inactive (auth fails closed, no
+  # crash) unless the `langfuse` Compose profile is running and
+  # LANGFUSE_OTLP_BASIC_AUTH is set; this keeps the base pipeline available
+  # without Langfuse and lets an unavailable backend degrade safely.
+  otlphttp/langfuse:
+    endpoint: http://langfuse-web:3000/api/public/otel
+    headers:
+      Authorization: "Basic ${env:LANGFUSE_OTLP_BASIC_AUTH}"
+      x-langfuse-ingestion-version: "4"
 service:
   pipelines:
     traces:
       receivers: [otlp]
       processors: [memory_limiter, attributes/redact, batch]
-      exporters: [debug]
+      exporters: [debug, otlphttp/langfuse]

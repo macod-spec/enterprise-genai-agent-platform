@@ -5,7 +5,7 @@ LOCAL_IMAGE := enterprise-genai-agent-platform:local
 SECURITY_REPORTS := $(CURDIR)/.security-reports
 TRIVY_IMAGE := aquasec/trivy:0.67.2
 SEMGREP_IMAGE := semgrep/semgrep:1.172.0@sha256:65dcd4408adda7c183a6b4550cb1e9b19f7f627a6fbb7e0559bd466bedc44d7b
-LICENSE_ALLOWLIST := 3-Clause BSD License;Apache Software License;Apache Software License; MIT License;Apache-2.0;Apache-2.0 AND BSD-2-Clause;Apache-2.0 OR BSD-2-Clause;Apache-2.0 OR BSD-3-Clause;Apache-2.0 OR MIT;BSD License;BSD-2-Clause;BSD-3-Clause;MIT;MIT License;MIT OR Apache-2.0;MIT-0;MIT No Attribution License (MIT-0);MPL-2.0 AND (Apache-2.0 OR MIT);Mozilla Public License 2.0 (MPL 2.0);PSF-2.0;Python Software Foundation License
+LICENSE_ALLOWLIST := 3-Clause BSD License;Apache License 2.0;Apache Software License;Apache Software License; MIT License;Apache-2.0;Apache-2.0 AND BSD-2-Clause;Apache-2.0 AND CNRI-Python;Apache-2.0 AND MIT;BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0;Apache-2.0 OR BSD-2-Clause;Apache-2.0 OR BSD-3-Clause;Apache-2.0 OR MIT;BSD License;BSD-2-Clause;BSD-3-Clause;ISC License (ISCL);MIT;MIT License;MIT OR Apache-2.0;MIT-0;MIT No Attribution License (MIT-0);MPL-2.0 AND (Apache-2.0 OR MIT);MPL-2.0 AND MIT;Mozilla Public License 2.0 (MPL 2.0);PSF-2.0;Python Software Foundation License
 
 bootstrap:
 	$(PYTHON) -m pip install --upgrade pip

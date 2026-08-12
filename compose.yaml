@@ -27,6 +27,10 @@ services:
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.132.0
     command: [--config=/etc/otelcol/config.yaml]
+    environment:
+      # Base64 of "<langfuse-public-key>:<langfuse-secret-key>". Only needed
+      # with the langfuse profile; harmless empty otherwise (exporter no-ops).
+      LANGFUSE_OTLP_BASIC_AUTH: ${LANGFUSE_OTLP_BASIC_AUTH:-}
     volumes:
       - ./observability/otel/collector.yaml:/etc/otelcol/config.yaml:ro
     read_only: true
@@ -114,9 +118,191 @@ services:
       timeout: 3s
       retries: 30
 
+  # Self-hosted Langfuse (ADR-007): optional Phase 2 LLM observability layer.
+  # Fed by the otel-collector's otlphttp/langfuse exporter, not called directly
+  # by the application. Demo-week-only; not part of the always-on local stack.
+  langfuse-postgres:
+    image: postgres:17.6-alpine
+    profiles: [langfuse]
+    user: "70:70"
+    environment:
+      POSTGRES_DB: langfuse
+      POSTGRES_USER: langfuse
+      POSTGRES_PASSWORD: ${LANGFUSE_POSTGRES_PASSWORD:?Set LANGFUSE_POSTGRES_PASSWORD in an ignored .env file}
+    volumes:
+      - langfuse-postgres-data:/var/lib/postgresql/data
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m,noexec,nosuid
+      - /run/postgresql:size=8m,noexec,nosuid
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U langfuse -d langfuse]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  langfuse-clickhouse:
+    image: clickhouse/clickhouse-server:25.12
+    profiles: [langfuse]
+    user: "101:101"
+    environment:
+      CLICKHOUSE_DB: default
+      CLICKHOUSE_USER: clickhouse
+      CLICKHOUSE_PASSWORD: ${LANGFUSE_CLICKHOUSE_PASSWORD:?Set LANGFUSE_CLICKHOUSE_PASSWORD in an ignored .env file}
+    volumes:
+      - langfuse-clickhouse-data:/var/lib/clickhouse
+      - langfuse-clickhouse-logs:/var/log/clickhouse-server
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      test: [CMD-SHELL, "wget --no-verbose --tries=1 --spider http://localhost:8123/ping || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
+
+  langfuse-minio:
+    image: cgr.dev/chainguard/minio
+    profiles: [langfuse]
+    entrypoint: sh
+    command: [-c, 'mkdir -p /data/langfuse && minio server --address ":9000" --console-address ":9001" /data']
+    environment:
+      MINIO_ROOT_USER: langfuse
+      MINIO_ROOT_PASSWORD: ${LANGFUSE_MINIO_ROOT_PASSWORD:?Set LANGFUSE_MINIO_ROOT_PASSWORD in an ignored .env file}
+    volumes:
+      - langfuse-minio-data:/data
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      test: [CMD, mc, ready, local]
+      interval: 2s
+      timeout: 5s
+      retries: 20
+      start_period: 2s
+
+  langfuse-redis:
+    image: redis:8.2.1-alpine
+    profiles: [langfuse]
+    user: "999:1000"
+    command: [sh, -c, 'exec redis-server --appendonly yes --maxmemory-policy noeviction --requirepass "$${LANGFUSE_REDIS_AUTH}"']
+    environment:
+      LANGFUSE_REDIS_AUTH: ${LANGFUSE_REDIS_AUTH:?Set LANGFUSE_REDIS_AUTH in an ignored .env file}
+    volumes:
+      - langfuse-redis-data:/data
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,noexec,nosuid
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      test: [CMD-SHELL, 'redis-cli --no-auth-warning -a "$${LANGFUSE_REDIS_AUTH}" ping | grep PONG']
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+  langfuse-web:
+    image: langfuse/langfuse:4
+    profiles: [langfuse]
+    environment:
+      NEXTAUTH_URL: http://localhost:3001
+      NEXTAUTH_SECRET: ${LANGFUSE_NEXTAUTH_SECRET:?Set LANGFUSE_NEXTAUTH_SECRET in an ignored .env file}
+      SALT: ${LANGFUSE_SALT:?Set LANGFUSE_SALT in an ignored .env file}
+      ENCRYPTION_KEY: ${LANGFUSE_ENCRYPTION_KEY:?Set LANGFUSE_ENCRYPTION_KEY in an ignored .env file}
+      TELEMETRY_ENABLED: "false"
+      DATABASE_URL: postgresql://langfuse:${LANGFUSE_POSTGRES_PASSWORD}@langfuse-postgres:5432/langfuse
+      CLICKHOUSE_MIGRATION_URL: clickhouse://langfuse-clickhouse:9000
+      CLICKHOUSE_URL: http://langfuse-clickhouse:8123
+      CLICKHOUSE_USER: clickhouse
+      CLICKHOUSE_PASSWORD: ${LANGFUSE_CLICKHOUSE_PASSWORD}
+      CLICKHOUSE_CLUSTER_ENABLED: "false"
+      LANGFUSE_S3_EVENT_UPLOAD_BUCKET: langfuse
+      LANGFUSE_S3_EVENT_UPLOAD_REGION: auto
+      LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: langfuse
+      LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: ${LANGFUSE_MINIO_ROOT_PASSWORD}
+      LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://langfuse-minio:9000
+      LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE: "true"
+      LANGFUSE_S3_MEDIA_UPLOAD_BUCKET: langfuse
+      LANGFUSE_S3_MEDIA_UPLOAD_REGION: auto
+      LANGFUSE_S3_MEDIA_UPLOAD_ACCESS_KEY_ID: langfuse
+      LANGFUSE_S3_MEDIA_UPLOAD_SECRET_ACCESS_KEY: ${LANGFUSE_MINIO_ROOT_PASSWORD}
+      LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT: http://langfuse-minio:9000
+      LANGFUSE_S3_MEDIA_UPLOAD_FORCE_PATH_STYLE: "true"
+      REDIS_HOST: langfuse-redis
+      REDIS_PORT: "6379"
+      REDIS_AUTH: ${LANGFUSE_REDIS_AUTH}
+      # Bootstraps a fixed local project/API-key pair so the otel-collector
+      # exporter can authenticate without a manual UI step. Local/demo only.
+      LANGFUSE_INIT_ORG_ID: local-org
+      LANGFUSE_INIT_ORG_NAME: NovaBank Local
+      LANGFUSE_INIT_PROJECT_ID: local-project
+      LANGFUSE_INIT_PROJECT_NAME: enterprise-genai-agent-platform
+      LANGFUSE_INIT_PROJECT_PUBLIC_KEY: ${LANGFUSE_INIT_PROJECT_PUBLIC_KEY:?Set LANGFUSE_INIT_PROJECT_PUBLIC_KEY in an ignored .env file}
+      LANGFUSE_INIT_PROJECT_SECRET_KEY: ${LANGFUSE_INIT_PROJECT_SECRET_KEY:?Set LANGFUSE_INIT_PROJECT_SECRET_KEY in an ignored .env file}
+      LANGFUSE_INIT_USER_EMAIL: ${LANGFUSE_INIT_USER_EMAIL:?Set LANGFUSE_INIT_USER_EMAIL in an ignored .env file}
+      LANGFUSE_INIT_USER_NAME: Local Operator
+      LANGFUSE_INIT_USER_PASSWORD: ${LANGFUSE_INIT_USER_PASSWORD:?Set LANGFUSE_INIT_USER_PASSWORD in an ignored .env file}
+    ports:
+      - "127.0.0.1:3001:3000"
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    depends_on:
+      langfuse-postgres: {condition: service_healthy}
+      langfuse-clickhouse: {condition: service_healthy}
+      langfuse-minio: {condition: service_healthy}
+      langfuse-redis: {condition: service_healthy}
+    healthcheck:
+      test: [CMD-SHELL, "wget --no-verbose --tries=1 --spider http://127.0.0.1:3000/api/public/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+  langfuse-worker:
+    image: langfuse/langfuse-worker:4
+    profiles: [langfuse]
+    environment:
+      SALT: ${LANGFUSE_SALT}
+      ENCRYPTION_KEY: ${LANGFUSE_ENCRYPTION_KEY}
+      TELEMETRY_ENABLED: "false"
+      DATABASE_URL: postgresql://langfuse:${LANGFUSE_POSTGRES_PASSWORD}@langfuse-postgres:5432/langfuse
+      CLICKHOUSE_MIGRATION_URL: clickhouse://langfuse-clickhouse:9000
+      CLICKHOUSE_URL: http://langfuse-clickhouse:8123
+      CLICKHOUSE_USER: clickhouse
+      CLICKHOUSE_PASSWORD: ${LANGFUSE_CLICKHOUSE_PASSWORD}
+      CLICKHOUSE_CLUSTER_ENABLED: "false"
+      LANGFUSE_S3_EVENT_UPLOAD_BUCKET: langfuse
+      LANGFUSE_S3_EVENT_UPLOAD_REGION: auto
+      LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: langfuse
+      LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: ${LANGFUSE_MINIO_ROOT_PASSWORD}
+      LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://langfuse-minio:9000
+      LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE: "true"
+      LANGFUSE_S3_MEDIA_UPLOAD_BUCKET: langfuse
+      LANGFUSE_S3_MEDIA_UPLOAD_REGION: auto
+      LANGFUSE_S3_MEDIA_UPLOAD_ACCESS_KEY_ID: langfuse
+      LANGFUSE_S3_MEDIA_UPLOAD_SECRET_ACCESS_KEY: ${LANGFUSE_MINIO_ROOT_PASSWORD}
+      LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT: http://langfuse-minio:9000
+      LANGFUSE_S3_MEDIA_UPLOAD_FORCE_PATH_STYLE: "true"
+      REDIS_HOST: langfuse-redis
+      REDIS_PORT: "6379"
+      REDIS_AUTH: ${LANGFUSE_REDIS_AUTH}
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    depends_on:
+      langfuse-postgres: {condition: service_healthy}
+      langfuse-clickhouse: {condition: service_healthy}
+      langfuse-minio: {condition: service_healthy}
+      langfuse-redis: {condition: service_healthy}
+
 volumes:
   platform-state: {}
   prometheus-data: {}
   grafana-data: {}
   postgres-data: {}
   redis-data: {}
+  langfuse-postgres-data: {}
+  langfuse-clickhouse-data: {}
+  langfuse-clickhouse-logs: {}
+  langfuse-minio-data: {}
+  langfuse-redis-data: {}

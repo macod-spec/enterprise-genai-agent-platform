@@ -28,6 +28,27 @@ class Settings(BaseSettings):
     rate_limit_window_seconds: int = Field(default=60, ge=1, le=3_600)
     model_provider: Literal["mock"] = "mock"
     max_workflow_steps: int = Field(default=8, ge=1, le=50)
+    model_gateway_provider: Literal["mock", "azure_openai"] = "mock"
+    model_gateway_allowlist: list[str] = Field(default_factory=lambda: ["mock-deterministic"])
+    model_gateway_timeout_seconds: float = Field(default=20.0, gt=0, le=120)
+    model_gateway_max_attempts: int = Field(default=2, ge=1, le=3)
+    model_gateway_daily_budget_gbp: float = Field(default=5.0, gt=0, le=10_000)
+    azure_openai_endpoint: str | None = None
+    azure_openai_api_version: str = "2024-10-21"
+    pii_protection_enabled: bool = True
+    pii_mask_entities: list[str] = Field(
+        default_factory=lambda: ["PERSON", "EMAIL_ADDRESS", "PHONE_NUMBER", "IP_ADDRESS"]
+    )
+    pii_block_entities: list[str] = Field(
+        default_factory=lambda: ["CREDIT_CARD", "IBAN_CODE", "US_SSN", "UK_SORT_CODE"]
+    )
+    pii_score_threshold: float = Field(default=0.5, ge=0.0, le=1.0)
+    content_safety_enabled: bool = True
+    content_safety_provider: Literal["mock", "azure"] = "mock"
+    content_safety_endpoint: str | None = None
+    content_safety_thresholds: dict[str, int] = Field(
+        default_factory=lambda: {"Hate": 4, "SelfHarm": 4, "Sexual": 4, "Violence": 4}
+    )
     mcp_tool_timeout_seconds: float = Field(default=2.0, gt=0, le=30)
     mcp_max_attempts: int = Field(default=2, ge=1, le=3)
     mcp_rate_limit: int = Field(default=30, ge=1, le=1_000)
@@ -50,6 +71,18 @@ class Settings(BaseSettings):
             raise ValueError("STATE_CONNECTION_URL is required for PostgreSQL or Redis")
         if self.app_env in {"staging", "production"} and self.state_backend == "sqlite":
             raise ValueError("SQLite state is not permitted in staging or production")
+        if self.model_gateway_provider == "azure_openai" and not self.azure_openai_endpoint:
+            raise ValueError(
+                "AZURE_OPENAI_ENDPOINT is required when MODEL_GATEWAY_PROVIDER=azure_openai"
+            )
+        if not self.model_gateway_allowlist:
+            raise ValueError("MODEL_GATEWAY_ALLOWLIST must not be empty")
+        if set(self.pii_mask_entities) & set(self.pii_block_entities):
+            raise ValueError("An entity type cannot appear in both PII mask and block lists")
+        if self.content_safety_provider == "azure" and not self.content_safety_endpoint:
+            raise ValueError(
+                "CONTENT_SAFETY_ENDPOINT is required when CONTENT_SAFETY_PROVIDER=azure"
+            )
         return self
 
 

@@ -5,6 +5,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from enterprise_genai_platform.agents.base import AgentResult
+from enterprise_genai_platform.model_gateway import ChatMessage, TokenUsage
 from enterprise_genai_platform.models import RoutingDecision
 from enterprise_genai_platform.skills.models import SkillDefinition
 
@@ -51,3 +52,21 @@ class InvestigationResponse(StrictResponse):
 
 class SkillListResponse(StrictResponse):
     skills: tuple[SkillDefinition, ...]
+
+
+class ModelGenerateRequest(StrictResponse):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    model: str = Field(min_length=1, max_length=200)
+    messages: tuple[ChatMessage, ...] = Field(min_length=1, max_length=50)
+    max_tokens: int = Field(default=512, ge=1, le=4_096)
+    temperature: float = Field(default=0.0, ge=0.0, le=2.0)
+
+
+class ModelGenerateResponse(StrictResponse):
+    content: str
+    model: str
+    provider: str
+    usage: TokenUsage
+    estimated_cost_gbp: float
+    finish_reason: str

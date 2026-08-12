@@ -10,18 +10,28 @@ readme = "README.md"
 license = "MIT"
 requires-python = ">=3.12,<3.14"
 dependencies = [
+  "aiohttp>=3.10,<4",
+  "azure-ai-contentsafety>=1.0.0,<2",
+  "azure-identity>=1.19,<2",
+  "en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl",
   "fastapi>=0.116,<1",
   "langgraph>=1.0,<2",
   "mcp>=1.29,<2",
   "msgpack>=1.2.1,<2",
+  "openai>=1.54,<2",
   "opentelemetry-api>=1.44,<2",
   "opentelemetry-sdk>=1.44,<2",
   "opentelemetry-instrumentation-fastapi>=0.65b0,<1",
   "opentelemetry-exporter-otlp-proto-grpc>=1.44,<2",
+  "pg8000>=1.31,<2",
+  # presidio-anonymizer is intentionally NOT a dependency: it unconditionally
+  # pins cryptography<49, which carries known CVEs. Detection-only via
+  # presidio-analyzer is sufficient; masking is a simple span substitution
+  # implemented in safety/pii.py.
+  "presidio-analyzer>=2.2.360,<3",
+  "prometheus-client>=0.22,<1",
   "pydantic-settings>=2.10,<3",
   "PyJWT[crypto]>=2.10,<3",
-  "prometheus-client>=0.22,<1",
-  "pg8000>=1.31,<2",
   "PyYAML>=6.0.3,<7",
   "redis>=6.4,<7",
   "uvicorn[standard]>=0.35,<1",
@@ -42,6 +52,9 @@ dev = [
   "types-PyYAML>=6.0.12,<7",
   "uv>=0.12,<1",
 ]
+
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/enterprise_genai_platform"]
