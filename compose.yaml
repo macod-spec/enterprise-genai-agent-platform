@@ -128,7 +128,7 @@ services:
     environment:
       POSTGRES_DB: langfuse
       POSTGRES_USER: langfuse
-      POSTGRES_PASSWORD: ${LANGFUSE_POSTGRES_PASSWORD:?Set LANGFUSE_POSTGRES_PASSWORD in an ignored .env file}
+      POSTGRES_PASSWORD: ${LANGFUSE_POSTGRES_PASSWORD:-}
     volumes:
       - langfuse-postgres-data:/var/lib/postgresql/data
     read_only: true
@@ -150,7 +150,7 @@ services:
     environment:
       CLICKHOUSE_DB: default
       CLICKHOUSE_USER: clickhouse
-      CLICKHOUSE_PASSWORD: ${LANGFUSE_CLICKHOUSE_PASSWORD:?Set LANGFUSE_CLICKHOUSE_PASSWORD in an ignored .env file}
+      CLICKHOUSE_PASSWORD: ${LANGFUSE_CLICKHOUSE_PASSWORD:-}
     volumes:
       - langfuse-clickhouse-data:/var/lib/clickhouse
       - langfuse-clickhouse-logs:/var/log/clickhouse-server
@@ -170,7 +170,7 @@ services:
     command: [-c, 'mkdir -p /data/langfuse && minio server --address ":9000" --console-address ":9001" /data']
     environment:
       MINIO_ROOT_USER: langfuse
-      MINIO_ROOT_PASSWORD: ${LANGFUSE_MINIO_ROOT_PASSWORD:?Set LANGFUSE_MINIO_ROOT_PASSWORD in an ignored .env file}
+      MINIO_ROOT_PASSWORD: ${LANGFUSE_MINIO_ROOT_PASSWORD:-}
     volumes:
       - langfuse-minio-data:/data
     cap_drop: [ALL]
@@ -188,7 +188,7 @@ services:
     user: "999:1000"
     command: [sh, -c, 'exec redis-server --appendonly yes --maxmemory-policy noeviction --requirepass "$${LANGFUSE_REDIS_AUTH}"']
     environment:
-      LANGFUSE_REDIS_AUTH: ${LANGFUSE_REDIS_AUTH:?Set LANGFUSE_REDIS_AUTH in an ignored .env file}
+      LANGFUSE_REDIS_AUTH: ${LANGFUSE_REDIS_AUTH:-}
     volumes:
       - langfuse-redis-data:/data
     read_only: true
@@ -207,9 +207,9 @@ services:
     profiles: [langfuse]
     environment:
       NEXTAUTH_URL: http://localhost:3001
-      NEXTAUTH_SECRET: ${LANGFUSE_NEXTAUTH_SECRET:?Set LANGFUSE_NEXTAUTH_SECRET in an ignored .env file}
-      SALT: ${LANGFUSE_SALT:?Set LANGFUSE_SALT in an ignored .env file}
-      ENCRYPTION_KEY: ${LANGFUSE_ENCRYPTION_KEY:?Set LANGFUSE_ENCRYPTION_KEY in an ignored .env file}
+      NEXTAUTH_SECRET: ${LANGFUSE_NEXTAUTH_SECRET:-}
+      SALT: ${LANGFUSE_SALT:-}
+      ENCRYPTION_KEY: ${LANGFUSE_ENCRYPTION_KEY:-}
       TELEMETRY_ENABLED: "false"
       DATABASE_URL: postgresql://langfuse:${LANGFUSE_POSTGRES_PASSWORD}@langfuse-postgres:5432/langfuse
       CLICKHOUSE_MIGRATION_URL: clickhouse://langfuse-clickhouse:9000
@@ -238,11 +238,11 @@ services:
       LANGFUSE_INIT_ORG_NAME: NovaBank Local
       LANGFUSE_INIT_PROJECT_ID: local-project
       LANGFUSE_INIT_PROJECT_NAME: enterprise-genai-agent-platform
-      LANGFUSE_INIT_PROJECT_PUBLIC_KEY: ${LANGFUSE_INIT_PROJECT_PUBLIC_KEY:?Set LANGFUSE_INIT_PROJECT_PUBLIC_KEY in an ignored .env file}
-      LANGFUSE_INIT_PROJECT_SECRET_KEY: ${LANGFUSE_INIT_PROJECT_SECRET_KEY:?Set LANGFUSE_INIT_PROJECT_SECRET_KEY in an ignored .env file}
-      LANGFUSE_INIT_USER_EMAIL: ${LANGFUSE_INIT_USER_EMAIL:?Set LANGFUSE_INIT_USER_EMAIL in an ignored .env file}
+      LANGFUSE_INIT_PROJECT_PUBLIC_KEY: ${LANGFUSE_INIT_PROJECT_PUBLIC_KEY:-}
+      LANGFUSE_INIT_PROJECT_SECRET_KEY: ${LANGFUSE_INIT_PROJECT_SECRET_KEY:-}
+      LANGFUSE_INIT_USER_EMAIL: ${LANGFUSE_INIT_USER_EMAIL:-}
       LANGFUSE_INIT_USER_NAME: Local Operator
-      LANGFUSE_INIT_USER_PASSWORD: ${LANGFUSE_INIT_USER_PASSWORD:?Set LANGFUSE_INIT_USER_PASSWORD in an ignored .env file}
+      LANGFUSE_INIT_USER_PASSWORD: ${LANGFUSE_INIT_USER_PASSWORD:-}
     ports:
       - "127.0.0.1:3001:3000"
     cap_drop: [ALL]
