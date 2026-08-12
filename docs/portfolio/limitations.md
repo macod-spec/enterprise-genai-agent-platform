@@ -24,11 +24,12 @@ not represented as a live production banking system.
 - Terraform models a cost-locked Azure sandbox but has not been applied.
 - Local `kind`/Helm validation signs images with an offline, ephemeral key. A
   separate keyless, OIDC-identity cosign signing path to a public Rekor log
-  exists in `container-publish.yaml`. Azure OIDC federation is now live
-  (`docs/ci-cd-azure-setup.md`) and `terraform-plan.yaml` has run successfully
-  end-to-end against real remote state; `container-publish.yaml` and
-  `terraform-apply.yaml` are identity-ready but have not actually been
-  dispatched yet.
+  exists in `container-publish.yaml` and has now run for real: a real image
+  is signed in ACR and independently verified
+  (`docs/portfolio/live-verification.md`). `terraform-plan.yaml` and a
+  scoped `terraform-apply.yaml` run have also completed successfully against
+  real remote state. `deploy.yaml` (AKS deploy) remains undispatched — it
+  needs a live AKS cluster, which does not exist yet.
 - AKS was believed blocked on Azure compute quota; diagnosis
   (`docs/azure-diagnosis.md`) found the real cause was an unregistered
   `Microsoft.Compute` resource provider stacked with a per-subscription
@@ -47,6 +48,18 @@ not represented as a live production banking system.
   way in, but this is a real reduction in network-layer defense in depth
   compared to a single-IP allowlist — an explicit, approved trade-off, not an
   oversight.
+- The live demo endpoint (`nova-gateway`, Azure Container Apps) runs the real
+  signed image against the real Azure OpenAI/AI Search/Content Safety
+  adapters, IP-restricted to a single address. It is not, however, a stand-in
+  for AKS-based production deployment: it uses `APP_ENV=local`, meaning
+  authentication is the platform's local-identity-header mechanism, not a
+  verified production identity provider — the IP restriction, not the auth
+  header, is the real access control here. It is also demo-only by design
+  (`docs/cost-tiers.md`, `make aca-up`/`make aca-down`), separate from the
+  Terraform-managed platform, and is expected to be torn down between
+  sessions rather than left running. The Kubernetes ingress path this would
+  eventually be replaced by (a single nginx controller, cert-manager TLS,
+  host-based routing) has not been built yet.
 
 ## Mandatory production gates
 

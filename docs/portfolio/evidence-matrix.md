@@ -48,6 +48,7 @@ rows so neither claim borrows the other's evidence.
 | Delivery — terraform apply (scoped) | `VERIFIED-LIVE` | `terraform-apply.yaml`: plan artifact reviewed, protected-Environment approval, real state lock, real apply | `docs/portfolio/live-verification.md`, run [31639145554](https://github.com/macod-spec/enterprise-genai-agent-platform/actions/runs/31639145554) | Scoped with `-target` to a config-only change (ADR-014); AKS/Redis/workload-identity remain unapplied |
 | Delivery — AKS deploy | `UNVERIFIED` | `deploy.yaml` | `actionlint`-clean, identity-ready | Never dispatched; needs AKS created first |
 | Operations | `VERIFIED-LOCAL` | Runbook, recovery exercise, SLOs, incident roles and evidence reports | `make operational-readiness` | Local recovery proves mechanics, not production RPO/RTO |
+| Live demo endpoint | `VERIFIED-LIVE` | Azure Container Apps deployment of the real signed image (Task 3), real Azure OpenAI/AI Search/Content Safety adapters, IP-restricted ingress (2026-08-12) | `docs/portfolio/live-verification.md`, `scripts/aca-up.sh`/`aca-down.sh` | Interim path while AKS is quota-blocked; local-identity auth only (no verified production identity provider); demo-only, torn down between sessions |
 
 Generated, sanitised evidence is stored under ignored `.security-reports/` so
 scanner output and machine-specific results are not accidentally committed.

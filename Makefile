@@ -101,3 +101,9 @@ kind-integration: sign-image
 
 durable-state-integration: check
 	./scripts/durable-state-integration.sh
+
+aca-up:
+	./scripts/aca-up.sh
+
+aca-down:
+	./scripts/aca-down.sh

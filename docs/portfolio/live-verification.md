@@ -259,3 +259,43 @@ state lock genuinely taken and released against the real remote backend,
 a plan reviewed as an artifact before a human approval gate, and an apply
 step that applies precisely the plan that was reviewed — nothing invented,
 nothing skipped.
+
+## Live demo endpoint (Azure Container Apps) — `VERIFIED-LIVE` (2026-08-12)
+
+`nova-gateway` on `nova-aca-env` (uksouth), running the real signed image
+from Task 3, IP-restricted to a single address, system-assigned identity
+with real RBAC (no keys). `scripts/aca-up.sh` / `scripts/aca-down.sh`
+capture the deployment as a reusable, idempotent script rather than
+one-off commands. Full narrative and honest boundaries in
+`docs/portfolio/limitations.md` — in particular, `APP_ENV=local` (the
+platform's local-identity-header auth, not a verified production identity
+provider) and this being demo-only infrastructure, separate from the
+Terraform-managed platform.
+
+Real end-to-end proof, straight from the container's own logs — three
+separate real Azure calls in one request, each with a token acquired via
+`DefaultAzureCredential` → `ManagedIdentityCredential` (no API key
+anywhere):
+
+```
+POST https://srch-novabank-ai-dev.search.windows.net/.../docs/search.post.search  → 200
+POST https://cs-novabank-ai-dev.cognitiveservices.azure.com/contentsafety/text:analyze → 200
+POST https://oai-novabank-ai-dev.openai.azure.com/openai/deployments/gpt-5-nano/chat/completions → 200 OK
+```
+
+Also confirmed live: the deployed request-size limit is enforced (a
+>1&nbsp;MB body returns `413`, not silently accepted), and a real
+`workflows/investigate` call against the fictional corpus returns cited
+evidence (`CUST-1098`, two accounts) exactly as the local test suite
+predicts.
+
+One live-only finding, consistent with the Azure OpenAI section above:
+`gpt-5-nano`'s hidden reasoning tokens can consume the entire response
+budget before any visible text is produced, which happened on a `rag/answer`
+call in this deployment (retrieval and citations were correct; the
+synthesized `answer` field came back empty). Not investigated further here
+— noted as a real characteristic of this model choice for RAG synthesis,
+not a deployment bug.
+
+No Langfuse trace exists for this deployment: Langfuse (ADR-007) is a
+self-hosted, Compose-only profile and was not stood up in Azure.
