@@ -78,8 +78,12 @@ warn_unreachable = true
 exclude = "(^|/)([.]venv|build|dist)/"
 
 [tool.pytest.ini_options]
-addopts = "--strict-config --strict-markers --cov --cov-report=term-missing --cov-fail-under=80"
+addopts = """--strict-config --strict-markers --cov --cov-report=term-missing \
+--cov-fail-under=80 -m "not live_azure\""""
 testpaths = ["tests"]
+markers = [
+    "live_azure: calls a real Azure endpoint; excluded by default, run via `make live-verification`",
+]
 
 [tool.bandit]
 exclude_dirs = [".venv", "tests"]

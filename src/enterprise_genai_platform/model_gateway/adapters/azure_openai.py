@@ -10,7 +10,7 @@ import time
 from typing import cast
 
 from azure.identity.aio import DefaultAzureCredential, get_bearer_token_provider
-from openai import AsyncAzureOpenAI
+from openai import AsyncAzureOpenAI, omit
 from openai.types.chat import ChatCompletionMessageParam
 
 from enterprise_genai_platform.model_gateway.contracts import (
@@ -22,6 +22,16 @@ from enterprise_genai_platform.model_gateway.contracts import (
 
 PROVIDER_NAME = "azure_openai"
 _COGNITIVE_SERVICES_SCOPE = "https://cognitiveservices.azure.com/.default"
+# Reasoning-family models (o1, o3, o4-*, gpt-5*) reject any explicit temperature
+# value other than their default (1) with a 400 unsupported_value error — confirmed
+# against a live gpt-5-nano deployment, not a documentation guess. There is no
+# capability flag in the deployment/model metadata that distinguishes this, so the
+# model name prefix is the only signal available.
+_REASONING_MODEL_PREFIXES = ("o1", "o3", "o4", "gpt-5")
+
+
+def _is_reasoning_model(model: str) -> bool:
+    return model.startswith(_REASONING_MODEL_PREFIXES)
 
 
 class AzureOpenAIChatModel:
@@ -49,6 +59,10 @@ class AzureOpenAIChatModel:
 
     async def generate(self, request: ModelGenerationRequest) -> ModelGenerationResult:
         started = time.perf_counter()
+        # Reasoning-family models reject an explicit temperature outright (400
+        # unsupported_value); `omit` drops the parameter from the request entirely
+        # rather than sending a value the API will refuse.
+        temperature = omit if _is_reasoning_model(request.model) else request.temperature
         try:
             response = await self._client.chat.completions.create(
                 model=request.model,
@@ -59,8 +73,12 @@ class AzureOpenAIChatModel:
                         for message in request.messages
                     ],
                 ),
-                max_tokens=request.max_tokens,
-                temperature=request.temperature,
+                # max_completion_tokens, not the deprecated max_tokens: reasoning-family
+                # models reject max_tokens outright with a 400 "unsupported_parameter"
+                # error. max_completion_tokens is accepted by both reasoning and
+                # non-reasoning chat completion models.
+                max_completion_tokens=request.max_tokens,
+                temperature=temperature,
             )
         except Exception as exc:
             raise ModelProviderFailure("Azure OpenAI request failed") from exc
