@@ -48,7 +48,10 @@ latency metrics. The gateway is wired into the agent HTTP API as
 using the mock provider (`tests/test_model_gateway.py`).
 
 Unverified: the Azure OpenAI adapter has not yet made a real call against a live
-Azure OpenAI deployment (blocked on the same subscription/quota constraints as
-AKS) and the in-process budget ledger is not durable across gateway replicas.
-Both are tracked as follow-up work before this gateway is relied on for
-production multi-tenant cost enforcement.
+Azure OpenAI deployment — creating one and granting the adapter's identity the
+`Cognitive Services OpenAI User` role is a separate, billable decision (see
+`docs/portfolio/live-verification.md`), not a quota block; AKS's quota/SKU
+restriction (`docs/azure-diagnosis.md`) was specific to AKS's VM family choice
+and does not apply here. The in-process budget ledger is also not durable
+across gateway replicas. Both are tracked as follow-up work before this
+gateway is relied on for production multi-tenant cost enforcement.

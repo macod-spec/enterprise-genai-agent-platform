@@ -177,6 +177,25 @@
   Azure Portal directly. `container-publish.yaml` and `terraform-apply.yaml`
   are identity- and RBAC-ready but not yet dispatched; `deploy.yaml` still
   cannot be proven live until AKS exists.
+- Correction, same day: the prior entry's "zero compute quota entries in
+  every region" diagnosis was incomplete. Re-run after registering the
+  `Microsoft.Compute` resource provider (`NotRegistered` — that alone
+  explains why every region returned nothing) surfaced the subscription's
+  real, family-specific quota: `Standard_D2s_v5` (the AKS default) carries
+  both a 0-vCPU limit on its family *and* a `NotAvailableForSubscription`
+  restriction in uksouth; most other general-purpose families show a normal
+  10-vCPU default. Found and switched to `Standard_D2ns_v6` (unrestricted,
+  quota already available, verified via `az vm list-skus`); the AKS preflight
+  check now passes live. Full diagnosis in `docs/azure-diagnosis.md`; a
+  portal quota-request template is kept in `docs/azure-quota-request.md` for
+  future headroom, explicitly correcting an earlier plan's suggestion to
+  request `Standard BS Family vCPUs`, which this codebase's own AKS module
+  refuses to use for a system node pool (B-series is burstable, unsuitable
+  for a pool that must always have capacity for core Kubernetes components).
+  AKS has still not been created — a real `terraform apply` is a genuine
+  ongoing cost (~$127/month for one `Standard_D2ns_v6` node at pay-as-you-go
+  pricing) and remains a separate, explicit decision, not a technical
+  blocker.
 - In progress: the partially created Azure sandbox is billable and is not yet
   application-ready.
 - Pre-production: Entra identity, durable PostgreSQL/Redis state, remote MCP auth,

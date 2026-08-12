@@ -262,7 +262,8 @@ def test_azure_modules_use_private_identity_and_cost_controls() -> None:
     assert '!can(regex("^Standard_B", var.aks_system_node_vm_size))' in root_variables
     assert '"${repo_root}/scripts/azure-aks-preflight.sh"' in apply_script
     assert (
-        '-var="aks_system_node_vm_size=${AKS_SYSTEM_NODE_VM_SIZE:-Standard_D2s_v5}"' in apply_script
+        '-var="aks_system_node_vm_size=${AKS_SYSTEM_NODE_VM_SIZE:-Standard_D2ns_v6}"'
+        in apply_script
     )
     assert "FreeTrial*" in aks_preflight
     assert 'spending_limit}" != "Off"' in aks_preflight

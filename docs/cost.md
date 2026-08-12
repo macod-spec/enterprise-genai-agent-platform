@@ -2,12 +2,14 @@
 
 This environment is a short-lived portfolio sandbox, not an always-on service. The
 estimate below uses Microsoft public retail prices in GBP for UK South, retrieved
-11 August 2026, pay-as-you-go with 730 hours per month. It excludes discounts, tax
-and variable consumption. Actual subscription billing is authoritative.
+12 August 2026 (AKS system node row; see `docs/azure-diagnosis.md` for why the SKU
+changed from the 11 August estimate), pay-as-you-go with 730 hours per month. It
+excludes discounts, tax and variable consumption. Actual subscription billing is
+authoritative.
 
 | Terraform component | Assumption | Estimated GBP/month |
 |---|---:|---:|
-| AKS system node | 1 × Linux `Standard_D2s_v5`, £0.0841/hour; AKS Free control plane; size is configurable but must remain a non-B-series AKS system-pool SKU | £61.39 |
+| AKS system node | 1 × Linux `Standard_D2ns_v6`, £0.1318/hour; AKS Free control plane; size is configurable but must remain a non-B-series AKS system-pool SKU with quota this subscription can actually use (`Standard_D2s_v5` cannot, `docs/azure-diagnosis.md`) | £96.21 |
 | Azure AI Search | Basic, 1 search unit, £0.0765/hour | £55.85 |
 | Container Registry | Premium registry unit, £1.2626/day | £38.40 |
 | Managed Redis | `Balanced_B1`, one non-HA node, £0.0280/hour | £20.44 |
@@ -20,9 +22,9 @@ and variable consumption. Actual subscription billing is authoritative.
 | Azure OpenAI | No provisioned throughput; token consumption only | workload dependent |
 | DNS zones, identities, role assignments, VNet | No material standing charge | £0 |
 
-The fixed standing estimate is approximately **£228–£231 per month**, before
+The fixed standing estimate is approximately **£263–£266 per month**, before
 telemetry ingestion, network data processing, model tokens, tax or support. A full
-24-hour demo session is approximately **£7.50–£10**, depending mainly on telemetry
+24-hour demo session is approximately **£8–£11**, depending mainly on telemetry
 and inference. The Terraform default budget of £50 is an alert threshold, not a
 guarantee or spending cap.
 
@@ -36,13 +38,14 @@ resource should run continuously during portfolio development.
 | Always on | Terraform-state storage account and its resource group | Retain because it is low cost and preserves reviewed deployment state. Review monthly. |
 | Active development only | Azure OpenAI account/deployments, Basic AI Search and PostgreSQL | Create only while developing or demonstrating the real model and RAG path. OpenAI is consumption based; Search and PostgreSQL accrue standing charges. Destroy after an inactive work period. |
 | Demo week only | ACR, Managed Redis, AKS, private endpoints/DNS links, Log Analytics and Application Insights | Re-create from Terraform for the managed-platform demonstration, collect evidence, then destroy immediately. Local Compose and `kind` are the normal development runtime. |
-| Configuration only until quota clears | AKS and workload identity federation | Keep Terraform, Helm, policy tests and `kind` evidence ready. Do not make AKS a dependency of Phase 2 application work. |
+| Configuration only until explicitly approved | AKS and workload identity federation | Keep Terraform, Helm, policy tests and `kind` evidence ready. The live preflight now passes (`docs/azure-diagnosis.md`); creation still awaits an explicit cost sign-off, not a quota clearance. Do not make AKS a dependency of Phase 2 application work. |
 
 The connected apply path runs `scripts/azure-aks-preflight.sh` before Terraform
 can apply. That preflight refuses the target if Azure still reports Free Trial
 quota, an active spending limit, no regional compute quota entries, an unavailable
 VM SKU, or a B-series AKS system node pool. This keeps the Pay-As-You-Go sandbox
-from starting a partial deployment that cannot create AKS cleanly.
+from starting a partial deployment that cannot create AKS cleanly — it currently
+passes with `Standard_D2ns_v6`.
 
 The platform resource group is deliberately disposable. Data required after its
 destruction must be exported to an approved non-production evidence location; the

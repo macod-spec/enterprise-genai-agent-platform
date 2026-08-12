@@ -33,6 +33,22 @@ The sanitised query result and calculation are recorded in
 without subscription discounts; a complete calculator export remains mandatory.
 See the official [Azure Retail Prices API documentation](https://learn.microsoft.com/en-us/rest/api/cost-management/retail-prices/azure-retail-prices).
 
+## Update, 2026-08-12: default VM size changed
+
+`docs/azure-diagnosis.md` found `Standard_D2s_v5` carries a 0-vCPU family
+quota and a `NotAvailableForSubscription` restriction specific to this
+subscription in uksouth — unrelated to the cost conclusion above, but it
+meant the default in `aks_system_node_vm_size` had to change to a SKU this
+subscription can actually use: `Standard_D2ns_v6` (2 vCPU, 8 GB, premium
+storage, confirmed unrestricted). Re-querying the same unauthenticated Retail
+Prices API on 2026-08-12 for `Standard_D2ns_v6` in uksouth returned GBP
+0.1318/hour Linux consumption — at 730 hours, approximately **GBP 96.21 per
+month** for the single proposed system node, before disks, networking or
+monitoring. This is higher than the superseded `Standard_D2s_v5` estimate
+above and still exceeds the Terraform default budget of GBP 50 — the
+non-zero-plan block described above still applies, for a larger margin than
+before.
+
 ## Proposed sandbox cost drivers
 
 | Component | Cost/risk characteristic | Sandbox decision |

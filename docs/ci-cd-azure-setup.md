@@ -170,13 +170,17 @@ push, a read-only plan) but still worth reviewing.
 | `terraform-apply.yaml` | `workflow_dispatch` + typed confirmation + environment approval | Yes — applies exactly the plan a reviewer approved. |
 | `deploy.yaml` | `workflow_dispatch` + digest input + typed confirmation + environment approval | Yes — deploys a specific, already-signed image digest to AKS. |
 
-`deploy.yaml` additionally requires a live AKS cluster, which is currently
-blocked on Azure compute quota (`docs/roadmap.md`); it will fail cleanly at
-the `az aks get-credentials` step until that is resolved, which is the
-correct behaviour rather than a bug to work around. The AKS Cluster User
-Role grant in step 3 above is likewise deferred until the cluster exists —
-granting a role on a resource that doesn't exist isn't possible, so that
-one command still needs to be run once AKS is created.
+`deploy.yaml` additionally requires a live AKS cluster, which does not exist
+yet — not because of a hard quota block anymore (`docs/azure-diagnosis.md`
+found and routed around the real cause, an unregistered resource provider
+plus a per-subscription restriction on the original VM size choice), but
+because creating one is a real, billable `terraform apply` still awaiting
+explicit sign-off. Until it's created, `deploy.yaml` will fail cleanly at
+the `az aks get-credentials` step, which is the correct behaviour rather
+than a bug to work around. The AKS Cluster User Role grant in step 3 above
+is likewise deferred until the cluster exists — granting a role on a
+resource that doesn't exist isn't possible, so that one command still needs
+to be run once AKS is created.
 
 ## What's actually done vs. still a placeholder
 
