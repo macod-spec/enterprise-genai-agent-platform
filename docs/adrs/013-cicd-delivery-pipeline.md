@@ -49,22 +49,35 @@ requiring manual review. `terraform-plan`'s read-only plan and
 `terraform-apply`'s plan job use lighter gating since they cannot change
 anything by themselves.
 
-None of this can run yet: it requires a one-time Azure AD app registration,
+None of this could run without a one-time Azure AD app registration,
 federated credentials (one per branch/Environment trust boundary used), role
 assignments, and GitHub secrets/variables — documented with exact commands
-in `docs/ci-cd-azure-setup.md`, none of which were run as part of this
-change. Creating an identity that lets automated CI act on a real Azure
+in `docs/ci-cd-azure-setup.md`. That setup was deliberately deferred at
+first (creating an identity that lets automated CI act on a real Azure
 subscription is a credentials/cloud-permissions decision for the platform
-owner, not an implicit side effect of authoring workflow YAML.
+owner, not an implicit side effect of authoring workflow YAML), then run
+with explicit approval on 2026-08-12. `terraform-plan.yaml` has since run
+live end-to-end: OIDC login, a real `terraform init` against remote state,
+and a real connected plan (5 to add, 2 to change, 0 to destroy — AKS,
+managed Redis, workload identity federation, ACR-pull role assignment).
+Two real bugs surfaced only by running it live rather than reasoning about
+it: GitHub's OIDC subject claim uses an undocumented "immutable ID" format
+(`repo:<owner>@<id>/<repo>@<id>:...`), and the Terraform state storage
+account's single-IP firewall unconditionally blocks GitHub-hosted runners
+(their published IP ranges — 7,280 CIDRs — exceed Azure's 200-rule
+per-account cap, so allowlisting isn't possible; resolved by opening the
+network layer while keeping shared-key access disabled, so Azure AD auth
+stays the only way in). Full detail in `docs/ci-cd-azure-setup.md`.
 
 ## Consequences
 
-- The delivery pipeline is complete as *code*: `actionlint` reports zero
-  issues across all seven workflows in the repository. It is not yet
-  complete as a *proven, live capability* — no run has actually
-  authenticated to Azure, pushed an image, or deployed anything, because the
-  federation setup is deliberately left as an explicit, separate, human
-  action.
+- The delivery pipeline is complete as *code* (`actionlint` reports zero
+  issues across all seven workflows) and `terraform-plan.yaml` is now a
+  *proven, live capability*: a real OIDC-authenticated run against real
+  remote state. `container-publish.yaml` and `terraform-apply.yaml` are
+  identity- and RBAC-ready but have not actually been dispatched (a
+  container push and a real infrastructure apply are each a further,
+  separate decision). `deploy.yaml` cannot be proven live until AKS exists.
 - `deploy.yaml` will fail cleanly at `az aks get-credentials` until AKS
   exists (still blocked on compute quota per the roadmap). That is the
   correct behaviour — this workflow is not meant to silently no-op or be

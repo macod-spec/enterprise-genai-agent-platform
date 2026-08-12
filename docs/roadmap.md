@@ -154,6 +154,29 @@
   Free Trial quota/spending-limit state and expose regional VM-family quota before
   retrying AKS. Until then, Argo CD, Kyverno and workload identity are demonstrated
   on `kind`; AKS Terraform remains validated and ready.
+- Completed with explicit approval: Azure OIDC federation for the CD pipeline
+  (`docs/ci-cd-azure-setup.md`) — app registration, five federated credentials,
+  `AcrPush`/`Storage Blob Data Contributor`/`Contributor` role assignments,
+  GitHub secrets/variables and four protected Environments. `terraform-plan.yaml`
+  has run live end-to-end: real OIDC login, real `terraform init` against remote
+  state, and a real connected plan (5 to add, 2 to change, 0 to destroy — AKS,
+  managed Redis, workload identity federation, ACR-pull role assignment), proving
+  the CD pipeline authored in ADR-013 actually works, not just that it lints
+  clean. Two real bugs were found only by running it live: GitHub's OIDC subject
+  claim uses an undocumented "immutable ID" format keyed by numeric owner/repo
+  IDs rather than names (the first run failed `AADSTS700213`); and the Terraform
+  state storage account's single-IP firewall unconditionally blocks GitHub-hosted
+  runners, whose 7,280 published CIDR ranges exceed Azure's 200-rule-per-account
+  IP allowlist cap — resolved, with explicit approval, by opening the storage
+  account's network layer while keeping `allowSharedKeyAccess=false`, so Azure AD
+  auth remains the only way in. Re-checked the AKS quota block at the same time
+  (`scripts/azure-aks-preflight.sh`): the subscription reports zero compute
+  quota entries in every region checked, not just uksouth — Azure's Support
+  Tickets API refused to file an increase request ("Free" support plan not
+  eligible even for quota-only requests via API), so that step now needs the
+  Azure Portal directly. `container-publish.yaml` and `terraform-apply.yaml`
+  are identity- and RBAC-ready but not yet dispatched; `deploy.yaml` still
+  cannot be proven live until AKS exists.
 - In progress: the partially created Azure sandbox is billable and is not yet
   application-ready.
 - Pre-production: Entra identity, durable PostgreSQL/Redis state, remote MCP auth,
