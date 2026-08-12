@@ -20,13 +20,24 @@ not represented as a live production banking system.
 - SLO, RPO and RTO values are proposals until measured in the target environment.
 - Terraform models a cost-locked Azure sandbox but has not been applied.
 - Local `kind`/Helm validation signs images with an offline, ephemeral key. A
-  separate keyless, OIDC-identity cosign signing path to a public Rekor log exists
-  in `container-publish.yaml`, but that workflow — like the rest of the CD
-  pipeline (`terraform-plan.yaml`, `terraform-apply.yaml`, `deploy.yaml`) — has not
-  been run: it needs a one-time Azure identity federation step
-  (`docs/ci-cd-azure-setup.md`) that is deliberately left as a separate decision.
-- AKS deployment remains blocked on Azure compute quota; `deploy.yaml` would fail
-  cleanly at `az aks get-credentials` until that clears.
+  separate keyless, OIDC-identity cosign signing path to a public Rekor log
+  exists in `container-publish.yaml`. Azure OIDC federation is now live
+  (`docs/ci-cd-azure-setup.md`) and `terraform-plan.yaml` has run successfully
+  end-to-end against real remote state; `container-publish.yaml` and
+  `terraform-apply.yaml` are identity-ready but have not actually been
+  dispatched yet.
+- AKS deployment remains blocked on Azure compute quota — confirmed still
+  blocked in every region checked, not just uksouth. Filing an increase
+  request requires the Azure Portal directly; the Support Tickets API refuses
+  quota-only requests on a Free support plan. `deploy.yaml` would fail cleanly
+  at `az aks get-credentials` until quota clears.
+- The Terraform state storage account's network firewall was opened
+  (`defaultAction: Allow`) to let GitHub-hosted runners reach it, since their
+  published IP ranges (7,280 CIDRs) exceed Azure's 200-rule IP-allowlist cap.
+  `allowSharedKeyAccess` remains `false`, so Azure AD auth is still the only
+  way in, but this is a real reduction in network-layer defense in depth
+  compared to a single-IP allowlist — an explicit, approved trade-off, not an
+  oversight.
 
 ## Mandatory production gates
 
