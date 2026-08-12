@@ -1,0 +1,126 @@
+name: Container publish (build, scan, sign, push to ACR)
+
+# Deliberately workflow_dispatch-only: pushing an image is a supply-chain and
+# registry-cost action, never an automatic side effect of a normal push.
+# Build/scan/SBOM already run on every push/PR in ci.yaml (container-build-only);
+# this workflow adds exactly the part that job intentionally excludes: pushing
+# and signing a real, registry-resident artifact.
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type PUSH_TO_ACR to confirm pushing an image to the registry'
+        required: true
+
+permissions:
+  contents: read
+
+env:
+  IMAGE_NAME: enterprise-agent-platform
+
+jobs:
+  build-scan-sign:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions: {contents: read}
+    outputs:
+      image-tar-digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - name: Reject unconfirmed runs
+        if: github.event.inputs.confirm != 'PUSH_TO_ACR'
+        run: |
+          echo "::error::Re-run with confirm=PUSH_TO_ACR to push an image to the registry."
+          exit 1
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: docker/setup-buildx-action@v3
+      - name: Build image (loaded locally, not pushed yet)
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: runtime
+          provenance: false
+          push: false
+          load: true
+          tags: ${{ env.IMAGE_NAME }}:${{ github.sha }}
+      - name: Generate SBOM (CycloneDX)
+        run: |
+          docker save --output image.tar ${{ env.IMAGE_NAME }}:${{ github.sha }}
+      - uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          input: image.tar
+          format: cyclonedx
+          output: sbom.cdx.json
+          scanners: ""
+      - name: HIGH/CRITICAL vulnerability gate
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          input: image.tar
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: image-and-sbom
+          path: |
+            image.tar
+            sbom.cdx.json
+          retention-days: 14
+
+  push:
+    needs: build-scan-sign
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: container-registry
+    permissions:
+      contents: read
+      id-token: write # required for both Azure OIDC login and cosign keyless signing
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/download-artifact@v4
+        with: {name: image-and-sbom}
+      - name: Load image
+        run: docker load --input image.tar
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Log in to ACR
+        run: az acr login --name "$(echo "${{ vars.ACR_LOGIN_SERVER }}" | cut -d. -f1)"
+      - name: Tag and push (commit-SHA tag; digest is the deployable reference)
+        id: push
+        run: |
+          image_ref="${{ vars.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
+          docker tag ${{ env.IMAGE_NAME }}:${{ github.sha }} "${image_ref}"
+          docker push "${image_ref}"
+          digest="$(docker inspect --format='{{index .RepoDigests 0}}' "${image_ref}" | cut -d@ -f2)"
+          echo "digest=${digest}" >> "${GITHUB_OUTPUT}"
+          echo "image_ref=${image_ref}" >> "${GITHUB_OUTPUT}"
+      - uses: sigstore/cosign-installer@v3
+      - name: Keyless sign the pushed image (OIDC identity, public Rekor transparency log)
+        env:
+          COSIGN_EXPERIMENTAL: "1"
+        run: |
+          cosign sign --yes \
+            "${{ vars.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}@${{ steps.push.outputs.digest }}"
+      - name: Attach the SBOM as a signed attestation
+        env:
+          COSIGN_EXPERIMENTAL: "1"
+        run: |
+          cosign attest --yes \
+            --type cyclonedx \
+            --predicate sbom.cdx.json \
+            "${{ vars.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}@${{ steps.push.outputs.digest }}"
+      - name: Record source-to-artifact provenance
+        run: |
+          {
+            echo "### Published image"
+            echo "- Source commit: \`${{ github.sha }}\`"
+            echo "- Image: \`${{ steps.push.outputs.image_ref }}\`"
+            echo "- Digest: \`${{ steps.push.outputs.digest }}\`"
+            echo "- Signed (cosign keyless, OIDC): yes"
+            echo "- SBOM attested (CycloneDX): yes"
+          } >> "${GITHUB_STEP_SUMMARY}"

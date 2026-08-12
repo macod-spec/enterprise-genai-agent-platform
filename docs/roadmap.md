@@ -79,8 +79,72 @@
   `azure-ai-contentsafety` dependency, plus a direct container smoke test that
   sent both a safe and an unsafe request through the real HTTP endpoint and
   confirmed the block.
-- Current critical path: groundedness evaluation and real hybrid RAG with
-  entitlement filtering against Azure AI Search.
+- Completed locally: Azure AI Search hybrid retrieval with server-side
+  entitlement filtering (ADR-011). `AzureSearchIndex` implements the same
+  `VectorIndex` protocol as the local in-memory index, so `AuthorizedRetriever`
+  is unchanged by which backend sits behind it; entitlement is enforced as a
+  server-side OData `$filter` built from the caller's authenticated roles
+  (`allowed_roles/all(r: search.in(...))`, matching the local index's subset
+  semantics) and fails closed on an empty role set or a role containing the
+  filter delimiter — no code path accepts a client-supplied filter. Hybrid
+  combines Azure BM25 keyword search with vector search over the platform's
+  existing free local embedding; a live embedding model is deferred to Azure
+  OpenAI validation. Index management (`scripts/ingest_azure_search.py`) is
+  intentionally separate from the serving path. `VectorIndex.search` and
+  `AuthorizedRetriever.retrieve` became `async` to support a real network
+  backend; the one production caller and all local-index tests were updated.
+  22 new/updated tests; full container rebuild, vulnerability scan, signing
+  and `kind`/Helm redeploy re-validated, plus a direct container smoke test
+  of the async local retrieval path end-to-end. A real circular-import bug
+  was found and fixed along the way (an unused eager re-export in
+  `gateway/__init__.py`). `AzureSearchIndex` and the ingestion script are
+  implemented and type-checked but not yet exercised against a live Azure AI
+  Search resource, same status as the other Azure adapters.
+- Completed locally: groundedness evaluation for synthesized RAG answers
+  (ADR-012), additive to the existing routing/evidence flow rather than a
+  change to it. `rag/synthesis.py` builds a cited-answer prompt from
+  authorized evidence only and calls the owned model gateway (so allowlist,
+  budget, PII and content-safety controls all apply to it automatically);
+  `rag/groundedness.py` is a deterministic, rule-based scorer (term overlap,
+  citations found, fabricated citations, composite pass/fail) reproducible in
+  CI without a live model. Exposed via `POST /api/v1/rag/answer`. A real
+  scoring bug was found and fixed while writing the evaluator's own test
+  cases: citation brackets were being tokenized into the term-overlap
+  calculation, penalizing every properly-cited answer. Because the mock
+  model's output is a generic acknowledgement rather than a real answer,
+  grading it against a "must be grounded" bar would be meaningless — the new
+  CI-integrated quality gate (`make groundedness-evaluation`) instead proves
+  the evaluator correctly classifies four known cases and separately records
+  the honest (ungrounded) mock-pipeline result as evidence. 25 new tests;
+  full container rebuild, vulnerability scan, signing and `kind`/Helm
+  redeploy re-validated, plus a direct container smoke test of the live
+  endpoint. This closes out the Phase 2 GenAI application layer (model
+  gateway, telemetry, Langfuse, PII, content safety, hybrid RAG, groundedness
+  — ADR-006 through ADR-012).
+- Completed locally: GitHub Actions delivery pipeline as code (ADR-013) — four
+  new `workflow_dispatch`-only workflows filling the gap `ci.yaml` deliberately
+  leaves open (it builds/scans/plans-zero on every push/PR but never logs into
+  Azure, pushes, applies or deploys). `container-publish.yaml` builds, SBOMs,
+  vulnerability-gates, then — behind a protected `container-registry`
+  Environment — pushes to ACR and keyless-signs the digest with cosign (OIDC
+  identity, public Rekor log), distinct from local `kind` validation's
+  ephemeral-key blob signing. `terraform-plan.yaml` produces a real, reviewable
+  plan against remote state without ever applying. `terraform-apply.yaml`
+  splits plan and apply into separate jobs so a protected-Environment approval
+  is against the exact plan file reviewed, not a fresh re-plan. `deploy.yaml`
+  Helm-deploys a digest-pinned image to AKS (rejects floating tags outright)
+  with a real health-check smoke test and automatic rollback on failure. Every
+  state-changing job carries both a typed confirmation input and a protected-
+  Environment approval gate. All four authenticate via Azure OIDC federation
+  (`azure/login@v2`, no stored client secret) and are `actionlint`-clean across
+  all seven repository workflows.
+  **Deliberately not run and not yet live**: the one-time Azure AD app
+  registration, federated credentials, role assignments and GitHub
+  secrets/variables these workflows need are documented with exact commands in
+  `docs/ci-cd-azure-setup.md`, but none were executed — granting an automated
+  identity permission to act on the real subscription is a credentials/cloud-
+  permissions decision for the platform owner. `deploy.yaml` will additionally
+  fail cleanly at `az aks get-credentials` until AKS itself exists.
 - Completed with explicit approval: published the sanitized repository, enabled
   GitHub-hosted CodeQL/code scanning and restored protected `main` branch controls.
 - Completed locally: AKS connected-apply preflight blocks Free Trial quota,

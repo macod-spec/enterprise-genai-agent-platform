@@ -25,6 +25,8 @@ from enterprise_genai_platform.gateway.models import (
     ModelGenerateRequest,
     ModelGenerateResponse,
     PlatformInfoResponse,
+    RagAnswerRequest,
+    RagAnswerResponse,
     ReadinessResponse,
     RouteRequest,
     RouteResponse,
@@ -46,6 +48,9 @@ from enterprise_genai_platform.model_gateway import (
 from enterprise_genai_platform.models import DeterministicMockModel
 from enterprise_genai_platform.observability import configure_observability
 from enterprise_genai_platform.orchestration import OperationsWorkflow, SupervisorWorkflow
+from enterprise_genai_platform.rag import build_retriever
+from enterprise_genai_platform.rag.groundedness import GroundednessEvaluator
+from enterprise_genai_platform.rag.synthesis import synthesize_grounded_answer
 from enterprise_genai_platform.safety.content_safety import ContentSafetyBlockedError
 from enterprise_genai_platform.safety.pii import PiiBlockedError
 from enterprise_genai_platform.skills import build_default_skill_registry
@@ -74,14 +79,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     model = DeterministicMockModel()
     repository = NovaBankRepository()
+    retriever = build_retriever(runtime_settings)
     mcp_gateway = build_local_mcp_gateway(
         repository,
+        retriever=retriever,
         timeout_seconds=runtime_settings.mcp_tool_timeout_seconds,
         max_attempts=runtime_settings.mcp_max_attempts,
         rate_limit=runtime_settings.mcp_rate_limit,
         rate_window_seconds=runtime_settings.mcp_rate_window_seconds,
     )
     app.state.mcp_gateway = mcp_gateway
+    app.state.retriever = retriever
+    app.state.groundedness_evaluator = GroundednessEvaluator(
+        minimum_term_overlap=runtime_settings.rag_groundedness_minimum_term_overlap
+    )
     app.state.skill_registry = build_default_skill_registry()
     connection_url = (
         runtime_settings.state_connection_url.get_secret_value()
@@ -253,6 +264,43 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             usage=result.usage,
             estimated_cost_gbp=result.estimated_cost_gbp,
             finish_reason=result.finish_reason,
+        )
+
+    @app.post(
+        f"{runtime_settings.api_prefix}/rag/answer",
+        response_model=RagAnswerResponse,
+        tags=["rag"],
+        dependencies=[Depends(enforce_rate_limit)],
+    )
+    async def rag_answer(payload: RagAnswerRequest, principal: AgentInvoker) -> RagAnswerResponse:
+        evidence = await app.state.retriever.retrieve(payload.query, caller_roles=principal.roles)
+        try:
+            answer = await synthesize_grounded_answer(
+                app.state.model_gateway,
+                model=runtime_settings.rag_synthesis_model,
+                query=payload.query,
+                evidence=evidence,
+                tenant=principal.subject,
+            )
+        except (ModelNotAllowed, ModelBudgetExceeded) as exc:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+        except PiiBlockedError as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        except ContentSafetyBlockedError as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        except ModelProviderFailure as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="The model provider is currently unavailable",
+            ) from exc
+        report = app.state.groundedness_evaluator.evaluate(answer, evidence)
+        return RagAnswerResponse(
+            answer=answer,
+            citations=tuple(hit.citation for hit in evidence.hits),
+            term_overlap_score=report.term_overlap_score,
+            citations_found=report.citations_found,
+            fabricated_citations=report.fabricated_citations,
+            is_grounded=report.is_grounded,
         )
 
     return app

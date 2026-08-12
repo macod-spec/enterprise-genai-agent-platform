@@ -79,7 +79,7 @@ class PolicyTools:
         caller_roles: frozenset[str],
         limit: int = 3,
     ) -> PolicySearchResults:
-        retrieval = self._retriever.retrieve(query, caller_roles=caller_roles, limit=limit)
+        retrieval = await self._retriever.retrieve(query, caller_roles=caller_roles, limit=limit)
         return PolicySearchResults(
             policies=tuple(
                 PolicyRecord(

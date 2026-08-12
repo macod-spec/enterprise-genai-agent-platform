@@ -27,6 +27,7 @@ jobs:
       - run: .venv/bin/bandit -q -r src agents mcp platform rag -c pyproject.toml
       - run: .venv/bin/pip-audit
       - run: .venv/bin/python -m enterprise_genai_platform.evaluation.runner
+      - run: .venv/bin/python scripts/groundedness-evaluation.py
       - run: .venv/bin/python scripts/load-failure-test.py
       - run: .venv/bin/python scripts/operator-demo.py
       - run: .venv/bin/python scripts/operational-readiness.py
@@ -129,5 +130,11 @@ jobs:
       - run: UV_CACHE_DIR=.security-reports/uv-cache uv sync --frozen --extra dev
       - run: make durable-state-integration
 
-# Intentionally absent: cloud login, registry push, non-zero plan, terraform apply,
-# remote kubectl, and deployment. The Terraform job asserts a zero-resource plan.
+# Intentionally absent here, and never triggered automatically by a push or
+# PR: cloud login, registry push, non-zero plan, terraform apply, remote
+# kubectl, and deployment. The Terraform job above asserts a zero-resource
+# plan. Those actions exist as separate, workflow_dispatch-only, OIDC- and
+# protected-Environment-gated workflows (container-publish.yaml,
+# terraform-plan.yaml, terraform-apply.yaml, deploy.yaml) — see
+# docs/ci-cd-azure-setup.md for the one-time Azure identity federation setup
+# they require before they can authenticate to anything.
