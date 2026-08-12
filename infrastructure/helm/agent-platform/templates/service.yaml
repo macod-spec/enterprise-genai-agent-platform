@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-gateway
+spec:
+  type: ClusterIP
+  selector: {app.kubernetes.io/name: agent-gateway}
+  ports: [{name: http, port: 8000, targetPort: http}]

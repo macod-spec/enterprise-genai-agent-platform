@@ -1,0 +1,5 @@
+* @macod-spec
+/infrastructure/ @macod-spec
+/.github/ @macod-spec
+/src/enterprise_genai_platform/mcp_boundary/ @macod-spec
+/src/enterprise_genai_platform/skills/ @macod-spec

@@ -1,0 +1,12 @@
+replicaCount: 1
+image:
+  repository: enterprise-genai-agent-platform
+  digest: ""
+  tag: local
+  pullPolicy: Never
+localDevelopment:
+  enabled: true
+appEnv: local
+autoscaling:
+  minReplicas: 1
+  maxReplicas: 2

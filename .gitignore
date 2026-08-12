@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+venv/
+
+# Environment variables / secrets
+.env
+.env.local
+
+# VS Code
+.vscode/
+
+# macOS
+.DS_Store
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+
+# Logs
+*.log
+
+# Local data
+/data/
+
+# Security scanner output
+.security-reports/
+*.sarif
+
+# Coverage and test output
+.coverage
+coverage.xml
+htmlcov/
+
+# Build output
+build/
+dist/

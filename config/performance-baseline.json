@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "profile": "local-in-process-mcp",
+  "requests_per_sample": 250,
+  "samples": 3,
+  "minimum_median_requests_per_second": 500.0,
+  "maximum_failure_test_seconds": 1.0,
+  "notes": "A conservative regression gate for local and CI runners; not a production capacity claim."
+}

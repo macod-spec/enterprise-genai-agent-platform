@@ -1,0 +1,33 @@
+groups:
+  - name: enterprise-agent-platform
+    rules:
+      - alert: AgentGatewayHighErrorRate
+        expr: sum(rate(agent_platform_http_requests_total{status=~"5.."}[5m])) / clamp_min(sum(rate(agent_platform_http_requests_total[5m])), 0.001) > 0.02
+        for: 10m
+        labels: {severity: warning}
+        annotations: {summary: Agent Gateway 5xx rate exceeds 2 percent}
+      - alert: AgentGatewayFastErrorBudgetBurn
+        expr: (sum(rate(agent_platform_http_requests_total{status=~"5.."}[5m])) / clamp_min(sum(rate(agent_platform_http_requests_total[5m])), 0.001) > 0.0144) and (sum(rate(agent_platform_http_requests_total{status=~"5.."}[1h])) / clamp_min(sum(rate(agent_platform_http_requests_total[1h])), 0.001) > 0.0144)
+        for: 2m
+        labels: {severity: critical}
+        annotations: {summary: Gateway availability error budget is burning rapidly}
+      - alert: AgentGatewaySlowErrorBudgetBurn
+        expr: (sum(rate(agent_platform_http_requests_total{status=~"5.."}[30m])) / clamp_min(sum(rate(agent_platform_http_requests_total[30m])), 0.001) > 0.006) and (sum(rate(agent_platform_http_requests_total{status=~"5.."}[6h])) / clamp_min(sum(rate(agent_platform_http_requests_total[6h])), 0.001) > 0.006)
+        for: 15m
+        labels: {severity: warning}
+        annotations: {summary: Gateway availability error budget is burning persistently}
+      - alert: AgentWorkflowP95LatencyHigh
+        expr: histogram_quantile(0.95, sum by (le) (rate(agent_platform_workflow_duration_seconds_bucket[10m]))) > 5
+        for: 10m
+        labels: {severity: warning}
+        annotations: {summary: Workflow p95 latency exceeds five seconds}
+      - alert: MCPToolFailures
+        expr: sum(rate(agent_platform_mcp_calls_total{outcome=~"error|timeout"}[5m])) > 0.05
+        for: 5m
+        labels: {severity: warning}
+        annotations: {summary: MCP tools are failing or timing out}
+      - alert: PendingHumanApprovals
+        expr: agent_platform_pending_approvals > 20
+        for: 15m
+        labels: {severity: warning}
+        annotations: {summary: Human approval backlog exceeds twenty requests}
