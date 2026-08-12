@@ -1,10 +1,12 @@
 """FastAPI application factory for the agent gateway."""
 
+import html
 import time
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
+from fastapi import Depends, FastAPI, Form, HTTPException, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from enterprise_genai_platform import __version__
@@ -302,5 +304,112 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             fabricated_citations=report.fabricated_citations,
             is_grounded=report.is_grounded,
         )
+
+    # A plain HTML/form demo surface, not a JSON API. Deliberately no
+    # inline <script> or <style>: the platform's strict
+    # Content-Security-Policy (default-src 'none', set unconditionally by
+    # RequestSecurityMiddleware) would block them, and this route does not
+    # get a security exemption. Plain <form method="post"> submission needs
+    # no script execution, so nothing here requires weakening that policy.
+    # Browser forms cannot set the X-Local-User/X-Local-Roles headers the
+    # JSON API uses for identity, so this surface authenticates as a fixed
+    # demo principal instead — the IP restriction on the deployment is the
+    # real access control, exactly as it already is for the JSON API.
+    _demo_principal = Principal(subject="browser-demo", roles=frozenset({"agent.invoke"}))
+
+    def _demo_page(result_html: str = "") -> HTMLResponse:
+        prefix = runtime_settings.api_prefix
+        return HTMLResponse(f"""<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>NovaBank AI Agent Platform — Demo</title></head>
+<body>
+<h1>NovaBank AI Agent Platform — Live Demo</h1>
+<p>Synthetic data only. Requests here run as a fixed demo identity
+(subject=browser-demo, roles=agent.invoke); access to this deployment is
+controlled by IP restriction, not this form.</p>
+
+<h2>Investigate a customer</h2>
+<form method="post" action="{prefix}/demo/investigate">
+  <label>Query:
+    <input type="text" name="query" size="60"
+           value="Look up account status for customer CUST-1098">
+  </label>
+  <button type="submit">Investigate</button>
+</form>
+
+<h2>Ask a policy question</h2>
+<form method="post" action="{prefix}/demo/rag">
+  <label>Query:
+    <input type="text" name="query" size="60"
+           value="What is required before a refund above GBP 100 can be approved?">
+  </label>
+  <button type="submit">Ask</button>
+</form>
+
+{result_html}
+</body>
+</html>""")
+
+    @app.get(f"{runtime_settings.api_prefix}/demo", include_in_schema=False)
+    async def demo_page() -> HTMLResponse:
+        return _demo_page()
+
+    @app.post(f"{runtime_settings.api_prefix}/demo/investigate", include_in_schema=False)
+    async def demo_investigate(request: Request, query: Annotated[str, Form()]) -> HTMLResponse:
+        outcome = await app.state.operations.investigate(
+            query,
+            subject=_demo_principal.subject,
+            roles=_demo_principal.roles,
+            request_id=request.state.request_id,
+        )
+        evidence_items = "".join(
+            f"<li>{html.escape(item.source_id)} ({html.escape(item.source_type)}): "
+            f"{html.escape(item.detail)}</li>"
+            for item in outcome.result.evidence
+        )
+        result_html = f"""
+<h2>Result</h2>
+<p><b>Route:</b> {html.escape(outcome.decision.route)}
+   — {html.escape(outcome.decision.reason)}</p>
+<p><b>Agent:</b> {html.escape(outcome.result.agent)}</p>
+<p><b>Summary:</b> {html.escape(outcome.result.summary)}</p>
+<ul>{evidence_items}</ul>
+<p><b>Requires human approval:</b> {outcome.result.requires_human_approval}</p>
+"""
+        return _demo_page(result_html)
+
+    @app.post(f"{runtime_settings.api_prefix}/demo/rag", include_in_schema=False)
+    async def demo_rag(query: Annotated[str, Form()]) -> HTMLResponse:
+        evidence = await app.state.retriever.retrieve(query, caller_roles=_demo_principal.roles)
+        try:
+            answer = await synthesize_grounded_answer(
+                app.state.model_gateway,
+                model=runtime_settings.rag_synthesis_model,
+                query=query,
+                evidence=evidence,
+                tenant=_demo_principal.subject,
+            )
+        except (
+            ModelNotAllowed,
+            ModelBudgetExceeded,
+            PiiBlockedError,
+            ContentSafetyBlockedError,
+            ModelProviderFailure,
+        ) as exc:
+            return _demo_page(f"<h2>Blocked</h2><p>{html.escape(str(exc))}</p>")
+        report = app.state.groundedness_evaluator.evaluate(answer, evidence)
+        citation_items = "".join(f"<li>{html.escape(hit.citation)}</li>" for hit in evidence.hits)
+        answer_html = html.escape(answer) or (
+            "<i>(the model returned no visible text — its response budget was "
+            "spent on internal reasoning; see docs/portfolio/live-verification.md)</i>"
+        )
+        result_html = f"""
+<h2>Answer</h2>
+<p>{answer_html}</p>
+<p><b>Grounded:</b> {report.is_grounded}
+   (term overlap {report.term_overlap_score:.2f})</p>
+<ul>{citation_items}</ul>
+"""
+        return _demo_page(result_html)
 
     return app
