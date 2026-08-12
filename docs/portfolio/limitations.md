@@ -26,11 +26,17 @@ not represented as a live production banking system.
   end-to-end against real remote state; `container-publish.yaml` and
   `terraform-apply.yaml` are identity-ready but have not actually been
   dispatched yet.
-- AKS deployment remains blocked on Azure compute quota — confirmed still
-  blocked in every region checked, not just uksouth. Filing an increase
-  request requires the Azure Portal directly; the Support Tickets API refuses
-  quota-only requests on a Free support plan. `deploy.yaml` would fail cleanly
-  at `az aks get-credentials` until quota clears.
+- AKS was believed blocked on Azure compute quota; diagnosis
+  (`docs/azure-diagnosis.md`) found the real cause was an unregistered
+  `Microsoft.Compute` resource provider stacked with a per-subscription
+  `NotAvailableForSubscription` restriction on the originally-configured VM
+  size, `Standard_D2s_v5` — not a hard zero-quota state. Fixed by registering
+  the provider and switching the AKS system node pool default to
+  `Standard_D2ns_v6` (confirmed unrestricted, quota already available); the
+  live preflight check now passes. AKS still has not actually been created —
+  a real `terraform apply` is a genuine ongoing cost (~$127/month for one
+  node at pay-as-you-go pricing) and remains a separate, explicit decision,
+  not a technical blocker anymore.
 - The Terraform state storage account's network firewall was opened
   (`defaultAction: Allow`) to let GitHub-hosted runners reach it, since their
   published IP ranges (7,280 CIDRs) exceed Azure's 200-rule IP-allowlist cap.

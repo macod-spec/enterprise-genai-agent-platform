@@ -57,7 +57,11 @@ variable "aks_admin_group_object_ids" {
 variable "aks_system_node_vm_size" {
   description = "AKS system node pool VM size. B-series is not allowed for system pools."
   type        = string
-  default     = "Standard_D2s_v5"
+  # Standard_D2s_v5 (the original default) carries both zero standardDSv5Family
+  # quota and a NotAvailableForSubscription restriction on this subscription in
+  # uksouth (docs/azure-diagnosis.md). Standard_D2ns_v6 is confirmed unrestricted
+  # with existing quota (10 vCPUs, standardDnv6Family) as of 2026-08-12.
+  default = "Standard_D2ns_v6"
   validation {
     condition     = can(regex("^Standard_", var.aks_system_node_vm_size)) && !can(regex("^Standard_B", var.aks_system_node_vm_size))
     error_message = "AKS system node pool VM size must be a Standard non-B-series SKU."

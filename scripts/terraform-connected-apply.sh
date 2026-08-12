@@ -43,7 +43,7 @@ terraform -chdir="${terraform_root}" plan -lock=true -input=false \
   -var='enable_deployment=true' \
   -var="deployment_confirmation=${deployment_confirmation}" \
   -var="aks_admin_group_object_ids=[\"${admin_group_id}\"]" \
-  -var="aks_system_node_vm_size=${AKS_SYSTEM_NODE_VM_SIZE:-Standard_D2s_v5}" \
+  -var="aks_system_node_vm_size=${AKS_SYSTEM_NODE_VM_SIZE:-Standard_D2ns_v6}" \
   -var='budget_contact_emails=["mcleonard.od@outlook.com"]' \
   -out="${temporary_root}/approved.tfplan"
 

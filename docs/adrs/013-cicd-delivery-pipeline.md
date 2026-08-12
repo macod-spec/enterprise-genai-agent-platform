@@ -79,9 +79,12 @@ stays the only way in). Full detail in `docs/ci-cd-azure-setup.md`.
   container push and a real infrastructure apply are each a further,
   separate decision). `deploy.yaml` cannot be proven live until AKS exists.
 - `deploy.yaml` will fail cleanly at `az aks get-credentials` until AKS
-  exists (still blocked on compute quota per the roadmap). That is the
-  correct behaviour — this workflow is not meant to silently no-op or be
-  disabled while AKS is unavailable, per the standing instruction to keep
+  exists. That is no longer a hard quota block (`docs/azure-diagnosis.md`
+  found and routed around the actual cause) — AKS just hasn't been created,
+  since a real apply is a genuine ongoing cost held for explicit sign-off.
+  This is the correct behaviour either way — this workflow is not meant to
+  silently no-op or be disabled while AKS is unavailable, per the standing
+  instruction to keep
   building everything that does not itself require a live cluster.
 - Reusing `scripts/terraform-connected-plan.sh` as-is for the CI workflow
   was considered and rejected: that script depends on a gitignored local

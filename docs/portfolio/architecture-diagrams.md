@@ -97,7 +97,7 @@ authenticate: they need a one-time Azure identity federation step
 | Local interface | Azure implementation | Status |
 | --- | --- | --- |
 | Local headers and RBAC | Microsoft Entra ID and APIM policies | Future |
-| Docker and kind/Helm | ACR and private AKS | `deploy.yaml` implemented; blocked on AKS compute quota |
+| Docker and kind/Helm | ACR and private AKS | `deploy.yaml` implemented; AKS preflight now passes live (`docs/azure-diagnosis.md`), not yet applied (real ongoing cost, held for sign-off) |
 | Local deterministic model | Azure OpenAI (keyless, `DefaultAzureCredential`) | Adapter implemented, unverified against a live endpoint |
 | Content moderation | Azure AI Content Safety (keyless) | Adapter implemented, unverified against a live endpoint |
 | Local RAG index | Azure AI Search, server-side entitlement-filtered hybrid retrieval | Adapter implemented, unverified against a live index |

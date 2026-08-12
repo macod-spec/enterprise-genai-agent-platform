@@ -8,7 +8,7 @@ report_path="${report_root}/azure-aks-preflight.json"
 expected_subscription="${AZURE_SUBSCRIPTION_ID:?Set AZURE_SUBSCRIPTION_ID to the approved target}"
 expected_tenant="${AZURE_TENANT_ID:?Set AZURE_TENANT_ID to the approved target}"
 location="${AZURE_LOCATION:-uksouth}"
-aks_vm_size="${AKS_SYSTEM_NODE_VM_SIZE:-Standard_D2s_v5}"
+aks_vm_size="${AKS_SYSTEM_NODE_VM_SIZE:-Standard_D2ns_v6}"
 
 mkdir -p "${report_root}"
 
