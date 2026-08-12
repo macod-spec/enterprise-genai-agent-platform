@@ -214,3 +214,48 @@ firewall — it is an anti-exfiltration policy, not just network ACLs), both
 were enabled together; `adminUserEnabled` remains `false`, so AAD/RBAC
 (the `AcrPush` role already granted to the CI identity in ADR-013) is
 still the only way to push or pull.
+
+## Real `terraform apply` through the pipeline — `VERIFIED-LIVE` (2026-08-12)
+
+Task 3's manual `az` fixes to ACR, AI Search and Azure OpenAI (above) had
+left Terraform declaring `public_network_access_enabled = false` for all
+three — a real drift between code and reality that a full apply would have
+reverted. ADR-014 (`docs/adrs/014-public-network-access-for-ci-reachability.md`)
+fixes the drift in code; this is the real, gated `terraform-apply.yaml` run
+that reconciled it.
+
+`terraform-apply.yaml` gained an optional `apply_targets` input so this
+config-only change could go through the real pipeline scoped to just the
+three affected resources (`-target`), without dragging the rest of the
+outstanding plan (AKS, managed Redis, workload identity, ACR-pull role —
+still deliberately unapplied) along with it.
+
+**First attempt** ([run 31638653481](https://github.com/macod-spec/enterprise-genai-agent-platform/actions/runs/31638653481)) hit
+a genuine transient Azure API timeout — `context deadline exceeded` on the
+Cognitive Services account lookup, 5 minutes in — not a config or code bug;
+a local dry-run moments earlier against the same real state had succeeded
+in under a minute. The state lock was correctly acquired and released even
+on this failure.
+
+**Second attempt** ([run 31639145554](https://github.com/macod-spec/enterprise-genai-agent-platform/actions/runs/31639145554)) succeeded
+completely: plan job produced a reviewable plan (downloaded and read before
+approving — "No changes. Your infrastructure matches the configuration.",
+matching the local dry-run), the protected `azure-apply` Environment
+approval was given only after reading that exact plan, and the apply job
+then ran:
+
+```
+Acquiring state lock. This may take a few moments...
+Releasing state lock. This may take a few moments...
+Apply complete! Resources: 0 added, 0 changed, 0 destroyed.
+```
+
+Zero resource changes is the *correct* result here, not a weak one: the
+manual fixes already matched what the newly-corrected Terraform code
+declares, so a working pipeline reconciling state with code and finding
+nothing left to do is exactly the expected, honest outcome. What this run
+actually proves is the full mechanics: real OIDC authentication, a real
+state lock genuinely taken and released against the real remote backend,
+a plan reviewed as an artifact before a human approval gate, and an apply
+step that applies precisely the plan that was reviewed — nothing invented,
+nothing skipped.
