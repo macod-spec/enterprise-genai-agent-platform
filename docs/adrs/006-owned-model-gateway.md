@@ -35,3 +35,20 @@ providers makes its operational and supply-chain cost worthwhile.
   requires custom governance integration.
 - Call model providers directly from each agent. Rejected because enforcement and
   telemetry would be duplicated and could be bypassed.
+
+## Implementation status
+
+Implemented in `src/enterprise_genai_platform/model_gateway/`: a provider-neutral
+`ChatModelProvider` contract, a deny-by-default model allowlist, an in-process
+per-tenant GBP budget ceiling that fails closed, a deterministic zero-cost mock
+adapter, a keyless Azure OpenAI adapter (`DefaultAzureCredential`, no embedded API
+key), GenAI OpenTelemetry semantic-convention spans, and Prometheus token/cost/
+latency metrics. The gateway is wired into the agent HTTP API as
+`POST /api/v1/model-gateway/generate` and exercised by unit and HTTP-level tests
+using the mock provider (`tests/test_model_gateway.py`).
+
+Unverified: the Azure OpenAI adapter has not yet made a real call against a live
+Azure OpenAI deployment (blocked on the same subscription/quota constraints as
+AKS) and the in-process budget ledger is not durable across gateway replicas.
+Both are tracked as follow-up work before this gateway is relied on for
+production multi-tenant cost enforcement.

@@ -7,11 +7,13 @@ RUN python -m pip wheel --wheel-dir /wheels .
 
 FROM python:3.13-slim AS runtime
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PATH=/opt/venv/bin:$PATH
-RUN groupadd --system --gid 10001 app && useradd --system --uid 10001 --gid app app
+RUN groupadd --system --gid 10001 app && useradd --system --uid 10001 --gid app app \
+    && mkdir -p /var/lib/platform && chown app:app /var/lib/platform
 WORKDIR /app
 COPY --from=builder /wheels /wheels
 RUN python -m venv /opt/venv \
-    && /opt/venv/bin/pip install --no-cache-dir /wheels/* \
+    && /opt/venv/bin/pip install --no-cache-dir --no-index --find-links=/wheels \
+        enterprise-genai-agent-platform \
     && /usr/local/bin/python -m pip uninstall --yes pip setuptools wheel \
     && /opt/venv/bin/pip uninstall --yes pip setuptools wheel \
     && rm -rf /wheels /root/.cache

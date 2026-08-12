@@ -53,6 +53,26 @@ MODEL_ESTIMATED_COST_GBP = Counter(
     "Estimated model cost in GBP; deterministic mock remains zero",
     ("provider",),
 )
+MODEL_GATEWAY_CALLS = Counter(
+    "agent_platform_model_gateway_calls_total",
+    "Model gateway generation calls by model, provider and outcome",
+    ("model", "provider", "outcome"),
+)
+MODEL_GATEWAY_DURATION = Histogram(
+    "agent_platform_model_gateway_duration_seconds",
+    "Model gateway generation latency by model and provider",
+    ("model", "provider"),
+)
+PII_FINDINGS = Counter(
+    "agent_platform_pii_findings_total",
+    "PII entities detected in model gateway traffic, by entity type and action",
+    ("entity_type", "action"),
+)
+CONTENT_SAFETY_FINDINGS = Counter(
+    "agent_platform_content_safety_findings_total",
+    "Content-safety findings acted on, by category and action",
+    ("category", "action"),
+)
 PENDING_APPROVALS = Gauge(
     "agent_platform_pending_approvals",
     "Human approvals created minus decisions in this process",

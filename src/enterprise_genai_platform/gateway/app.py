@@ -3,7 +3,7 @@
 import time
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, Request, Response
+from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
@@ -22,6 +22,8 @@ from enterprise_genai_platform.gateway.middleware import RequestSecurityMiddlewa
 from enterprise_genai_platform.gateway.models import (
     HealthResponse,
     InvestigationResponse,
+    ModelGenerateRequest,
+    ModelGenerateResponse,
     PlatformInfoResponse,
     ReadinessResponse,
     RouteRequest,
@@ -34,9 +36,18 @@ from enterprise_genai_platform.metrics import (
     WORKFLOW_DURATION,
     safe_error_code,
 )
+from enterprise_genai_platform.model_gateway import (
+    ModelBudgetExceeded,
+    ModelGenerationRequest,
+    ModelNotAllowed,
+    ModelProviderFailure,
+    build_model_gateway,
+)
 from enterprise_genai_platform.models import DeterministicMockModel
 from enterprise_genai_platform.observability import configure_observability
 from enterprise_genai_platform.orchestration import OperationsWorkflow, SupervisorWorkflow
+from enterprise_genai_platform.safety.content_safety import ContentSafetyBlockedError
+from enterprise_genai_platform.safety.pii import PiiBlockedError
 from enterprise_genai_platform.skills import build_default_skill_registry
 from enterprise_genai_platform.state import build_approval_store
 
@@ -93,6 +104,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         PolicyAgent(mcp_gateway),
         max_steps=runtime_settings.max_workflow_steps,
     )
+    app.state.model_gateway = build_model_gateway(runtime_settings)
 
     app.add_middleware(
         CORSMiddleware,
@@ -201,5 +213,46 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     async def list_skills(_principal: PlatformViewer) -> SkillListResponse:
         return SkillListResponse(skills=app.state.skill_registry.list_approved())
+
+    @app.post(
+        f"{runtime_settings.api_prefix}/model-gateway/generate",
+        response_model=ModelGenerateResponse,
+        tags=["model-gateway"],
+        dependencies=[Depends(enforce_rate_limit)],
+    )
+    async def generate(
+        payload: ModelGenerateRequest, principal: AgentInvoker
+    ) -> ModelGenerateResponse:
+        request = ModelGenerationRequest(
+            model=payload.model,
+            messages=payload.messages,
+            tenant=principal.subject,
+            agent="model-gateway-api",
+            max_tokens=payload.max_tokens,
+            temperature=payload.temperature,
+        )
+        try:
+            result = await app.state.model_gateway.generate(request)
+        except (ModelNotAllowed, ModelBudgetExceeded) as exc:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+        except PiiBlockedError as exc:
+            # Entity type labels only (e.g. "CREDIT_CARD"); never the matched value.
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        except ContentSafetyBlockedError as exc:
+            # Category labels only (e.g. "Violence"); never the analyzed text.
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        except ModelProviderFailure as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="The model provider is currently unavailable",
+            ) from exc
+        return ModelGenerateResponse(
+            content=result.content,
+            model=result.model,
+            provider=result.provider,
+            usage=result.usage,
+            estimated_cost_gbp=result.estimated_cost_gbp,
+            finish_reason=result.finish_reason,
+        )
 
     return app

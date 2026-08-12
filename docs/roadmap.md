@@ -35,9 +35,52 @@
   always-on/development/demo-week resource lifetime policy. Full Git history passes
   Gitleaks and detect-secrets; real subscription, tenant and state-account
   identifiers have been removed from the publishable working tree.
-- Current critical path: Phase 2 model gateway, token/cost and GenAI OpenTelemetry
-  telemetry, self-hosted Langfuse, Presidio/Content Safety, groundedness evaluation,
-  and real hybrid RAG with entitlement filtering against Azure AI Search.
+- Completed locally: Phase 2 owned model gateway (ADR-006) — provider-neutral
+  contract, deny-by-default model allowlist, per-tenant GBP budget enforcement,
+  a zero-cost mock adapter and a keyless Azure OpenAI adapter, GenAI OpenTelemetry
+  spans and Prometheus token/cost/latency telemetry, exposed via the gateway API
+  and covered by unit/HTTP tests. The Azure OpenAI adapter remains unverified
+  against a live deployment pending Azure OpenAI access/quota.
+- Completed locally: self-hosted Langfuse (ADR-007) as an optional `langfuse`
+  Compose profile (web/worker, its own Postgres/ClickHouse/MinIO/Redis), fed by
+  the existing otel-collector via a new `otlphttp/langfuse` fan-out exporter with
+  no application code changes. Locally validated end-to-end: a live model-gateway
+  call was confirmed ingested and auto-classified as a Langfuse `GENERATION` via
+  the public API. Fixed two real bugs found along the way (ClickHouse single-node
+  migration config; a root-owned Docker volume that crash-looped the gateway).
+  Also validated: local container build → SBOM → HIGH/CRITICAL vuln gate → offline
+  cosign signing → ephemeral `kind`/Helm deploy with Kubernetes security
+  assertions, end to end, after the model gateway changes.
+- Completed locally: Presidio-backed PII detection and masking (ADR-009),
+  enforced inside `ModelGateway.generate()` for both request messages and
+  provider responses, on by default. `presidio-analyzer` runs against the
+  small `en_core_web_sm` spaCy model plus a custom `UK_SORT_CODE` recognizer;
+  `presidio-anonymizer` was deliberately left out of the dependency tree
+  because it unconditionally pins a `cryptography` range carrying three known
+  CVEs, and masking a `presidio-analyzer` result is a ~15-line span
+  substitution. Audit metadata (Prometheus counter, HTTP error detail) carries
+  entity type and action only, never matched text. Covered by 14 new unit/HTTP
+  tests; `make audit`/`sast`/`secrets`/`licenses` all re-verified clean after
+  the dependency changes (three additional permissive-license entries needed
+  allowlisting: ISC, and two composite BSD/Apache expressions from numpy and
+  regex).
+- Completed locally: Azure Content Safety guard (ADR-010), structurally
+  parallel to the PII guard and enforced in the same place — every request
+  message and provider response is checked against a per-category severity
+  threshold (Hate/SelfHarm/Sexual/Violence). A free deterministic mock
+  provider keeps the policy path exercised without a live Azure resource; a
+  keyless `AzureContentSafetyProvider` (via `DefaultAzureCredential`) is
+  implemented but not yet verified against a live endpoint, same status as
+  the Azure OpenAI adapter. Deliberately fails closed on provider error or a
+  missing severity value, an explicit asymmetry with Langfuse's
+  don't-fail-inference rule: a safety control going down should not silently
+  downgrade to ungoverned. 12 new tests; full container rebuild, vulnerability
+  scan, offline signing and `kind`/Helm redeploy re-validated after adding the
+  `azure-ai-contentsafety` dependency, plus a direct container smoke test that
+  sent both a safe and an unsafe request through the real HTTP endpoint and
+  confirmed the block.
+- Current critical path: groundedness evaluation and real hybrid RAG with
+  entitlement filtering against Azure AI Search.
 - Completed with explicit approval: published the sanitized repository, enabled
   GitHub-hosted CodeQL/code scanning and restored protected `main` branch controls.
 - Completed locally: AKS connected-apply preflight blocks Free Trial quota,
