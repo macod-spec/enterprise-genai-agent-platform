@@ -9,6 +9,9 @@ permissions:
   contents: read
   issues: write
 
+env:
+  PYTHONPATH: src
+
 jobs:
   warn-after-24-hours:
     runs-on: ubuntu-latest
