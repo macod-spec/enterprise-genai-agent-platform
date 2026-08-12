@@ -25,6 +25,7 @@ REQUIRED_EVIDENCE_PATHS = (
     ".github/workflows/ci.yaml",
     "docs/runbook.md",
     "docs/privacy-model-risk.md",
+    "docs/portfolio/live-verification.md",
 )
 VERIFICATION_LABELS = ("`VERIFIED-LIVE`", "`VERIFIED-LOCAL`", "`UNVERIFIED`")
 

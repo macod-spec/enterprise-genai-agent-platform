@@ -35,6 +35,9 @@ evaluate:
 groundedness-evaluation:
 	$(PYTHON) scripts/groundedness-evaluation.py
 
+live-verification:
+	$(PYTHON) -m pytest tests/integration -m live_azure -v --no-cov
+
 reliability:
 	$(PYTHON) scripts/load-failure-test.py
 
