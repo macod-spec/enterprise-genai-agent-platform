@@ -35,6 +35,41 @@ _VECTOR_PROFILE_NAME = "default-vector-profile"
 _VECTOR_ALGORITHM_NAME = "default-hnsw"
 _ROLE_DELIMITER = "|"
 
+# Azure AI Search's OData collection-filter grammar cannot directly express
+# "the caller must hold every role a chunk lists" (a subset check): `all()`
+# only accepts a *negative* per-element test (`x ne y`, `not (x eq y)`, or
+# `not search.in(...)`) — a positive `search.in(...)` inside `all()` is
+# rejected outright with an InvalidExpression error, confirmed against the
+# live service, not a documentation guess. LocalVectorIndex has no such
+# restriction; it does the same subset check natively in Python.
+#
+# The workaround: instead of testing "is r in caller_roles" (positive, not
+# allowed in all()), test "is r in (known_roles - caller_roles)" (negative,
+# allowed) — logically equivalent to the subset check *provided* every role
+# a chunk can ever declare is a member of this constant. Scoped deliberately
+# narrow: only roles that appear in rag/documents/*.md's `allowed_roles`
+# frontmatter, not the platform's full (larger, ungoverned) role vocabulary
+# — a wrong role name here would fail closed (chunk becomes unretrievable),
+# not fail open, so the failure mode of drift is safe. `add()` enforces this
+# at ingestion time so drift is caught immediately, not discovered as a
+# silently-broken query later.
+_KNOWN_CHUNK_ROLES = frozenset({"agent.invoke", "privacy.read"})
+
+
+def _search_document_key(chunk_id: str) -> str:
+    """Sanitize a chunk_id into a valid Azure AI Search document key.
+
+    Search document keys may only contain letters, digits, underscore, dash
+    or equal sign — this platform's chunk_id format (`{document_id}#chunk-N`,
+    baked into citation parsing in rag/groundedness.py and rag/synthesis.py)
+    uses `#`, which Search rejects outright with an InvalidName error. Found
+    only by a live ingest, not by any mocked-SDK unit test. The sanitized
+    value is used solely as the index's internal key; `chunk_id` itself is
+    carried through unchanged as a regular field so citations are unaffected.
+    """
+    return chunk_id.replace("#", "--")
+
+
 # The SDK's SearchFieldDataType is a runtime str-Enum, but its stubs resolve
 # member access and .Collection(...) to a bare Enum, so mypy cannot see it as
 # a str. Cast once here rather than scattering ignores through the schema.
@@ -53,10 +88,11 @@ def build_role_filter(caller_roles: frozenset[str]) -> str:
     """Build a server-side OData filter admitting only chunks the caller may see.
 
     Requires every role a chunk declares to be held by the caller, matching
-    `LocalVectorIndex`'s `chunk.allowed_roles <= caller_roles` semantics. An
-    empty caller_roles set matches nothing: `search.in` against an empty list
-    is never true, so `all()` over a chunk's (always non-empty, per ingestion
-    validation) allowed_roles fails closed rather than open.
+    `LocalVectorIndex`'s `chunk.allowed_roles <= caller_roles` semantics —
+    implemented as "no chunk role is among the known roles the caller lacks"
+    (see `_KNOWN_CHUNK_ROLES` for why this indirection is necessary). An
+    empty caller_roles set matches nothing: every known role is then
+    "missing", so any chunk with at least one declared role fails closed.
 
     `search.in` splits its target list on a delimiter with no per-element
     escaping, so a role containing that delimiter would silently be read as
@@ -66,9 +102,9 @@ def build_role_filter(caller_roles: frozenset[str]) -> str:
     """
     if any(_ROLE_DELIMITER in role for role in caller_roles):
         raise ValueError(f"Role values must not contain {_ROLE_DELIMITER!r}")
-    escaped = sorted(role.replace("'", "''") for role in caller_roles)
-    roles_csv = _ROLE_DELIMITER.join(escaped)
-    return f"allowed_roles/all(r: search.in(r, '{roles_csv}', '{_ROLE_DELIMITER}'))"
+    missing_roles = sorted(role.replace("'", "''") for role in (_KNOWN_CHUNK_ROLES - caller_roles))
+    missing_csv = _ROLE_DELIMITER.join(missing_roles)
+    return f"allowed_roles/all(r: not search.in(r, '{missing_csv}', '{_ROLE_DELIMITER}'))"
 
 
 class AzureSearchIndex:
@@ -97,7 +133,8 @@ class AzureSearchIndex:
         index = SearchIndex(
             name=self._index_name,
             fields=[
-                SimpleField(name="chunk_id", type=_TYPE_STRING, key=True),
+                SimpleField(name="search_key", type=_TYPE_STRING, key=True),
+                SimpleField(name="chunk_id", type=_TYPE_STRING, filterable=True),
                 SimpleField(name="document_id", type=_TYPE_STRING, filterable=True),
                 SearchableField(name="title", type=_TYPE_STRING),
                 SimpleField(name="version", type=_TYPE_STRING),
@@ -133,8 +170,18 @@ class AzureSearchIndex:
         """Upload authored chunks; ingestion validation happens before this call."""
         if not chunks:
             return
+        for chunk in chunks:
+            unknown_roles = chunk.allowed_roles - _KNOWN_CHUNK_ROLES
+            if unknown_roles:
+                raise ValueError(
+                    f"Chunk {chunk.chunk_id!r} declares role(s) {sorted(unknown_roles)} "
+                    "not in azure_search._KNOWN_CHUNK_ROLES. The role-filter query "
+                    "correctness depends on this constant covering every role that can "
+                    "appear in allowed_roles — add the new role there before ingesting."
+                )
         documents = [
             {
+                "search_key": _search_document_key(chunk.chunk_id),
                 "chunk_id": chunk.chunk_id,
                 "document_id": chunk.document_id,
                 "title": chunk.title,
