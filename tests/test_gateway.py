@@ -245,3 +245,44 @@ def test_structured_logging_redacts_sensitive_fields() -> None:
 
     assert payload["request_id"] == "request-1"
     assert payload["authorization"] == "[REDACTED]"
+
+
+def test_demo_page_is_reachable_without_headers() -> None:
+    """Unlike the JSON API, the browser demo form needs no X-Local-* headers —
+    browser forms cannot set custom headers."""
+    app = create_app(settings())
+    client = TestClient(app)
+
+    response = client.get("/api/v1/demo")
+
+    assert response.status_code == 200
+    assert "text/html" in response.headers["content-type"]
+    assert "<form" in response.text
+
+
+def test_demo_investigate_form_runs_the_real_workflow_with_a_fixed_identity() -> None:
+    app = create_app(settings())
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/v1/demo/investigate",
+        data={"query": "Why is CUST-1098 payment transaction TXN-5001 delayed?"},
+    )
+
+    assert response.status_code == 200
+    assert "CUST-1098" in response.text or "customer" in response.text.lower()
+
+
+def test_demo_pages_escape_user_supplied_text() -> None:
+    """A query containing HTML-significant characters must never be reflected
+    unescaped into the response — this is a browser-facing surface."""
+    app = create_app(settings())
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/v1/demo/investigate",
+        data={"query": "<script>alert(1)</script>"},
+    )
+
+    assert response.status_code == 200
+    assert "<script>alert(1)</script>" not in response.text
