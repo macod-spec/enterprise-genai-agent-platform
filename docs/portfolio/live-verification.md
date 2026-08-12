@@ -151,3 +151,66 @@ misleading generic error that hid the second one), and two infrastructure
 findings (both OpenAI and AI Search defaulted to
 `publicNetworkAccess: Disabled`, opened with explicit approval, AAD auth
 unchanged as the real gate).
+
+## Supply chain — real signed image in ACR — `VERIFIED-LIVE` (2026-08-12)
+
+`container-publish.yaml` run
+[31637091014](https://github.com/macod-spec/enterprise-genai-agent-platform/actions/runs/31637091014):
+built, SBOM'd, HIGH/CRITICAL-vulnerability-gated, pushed to
+`acrnovabankaidev.azurecr.io`, and keyless-signed with cosign via GitHub
+OIDC.
+
+```
+Image:  acrnovabankaidev.azurecr.io/enterprise-agent-platform@sha256:5e04217d5fc0ca27e97f8e9249f9c5b8a139e707157a36ecb47c27938c77b5bd
+Tag:    6ef92708694e64f497cdc5973eede7d78de78cbf (commit SHA)
+```
+
+Signature verified from a **separate** step (not the workflow that produced
+it — a fresh, independent `cosign verify` run against the live registry):
+
+```
+$ cosign verify acrnovabankaidev.azurecr.io/enterprise-agent-platform@sha256:5e04217d5fc0ca27e97f8e9249f9c5b8a139e707157a36ecb47c27938c77b5bd \
+    --certificate-identity-regexp ".*" \
+    --certificate-oidc-issuer https://token.actions.githubusercontent.com
+
+Verification for ...@sha256:5e04217d5... --
+The following checks were performed on each of these signatures:
+  - The cosign claims were validated
+  - Existence of the claims in the transparency log was verified offline
+  - The code-signing certificate was verified using trusted certificate authority certificates
+
+Subject: https://github.com/macod-spec/enterprise-genai-agent-platform/.github/workflows/container-publish.yaml@refs/heads/main
+Issuer: https://token.actions.githubusercontent.com
+githubWorkflowSha: 6ef92708694e64f497cdc5973eede7d78de78cbf
+githubWorkflowTrigger: workflow_dispatch
+```
+
+The certificate identity is bound to the exact workflow file, repo, commit
+and trigger type — not just "some GitHub Actions run somewhere."
+
+**Negative proof**: pushed an unrelated, unsigned image
+(`alpine:latest`, retagged) to the same repository, then confirmed
+verification fails:
+
+```
+$ cosign verify acrnovabankaidev.azurecr.io/enterprise-agent-platform:unsigned-test ...
+Error: no signatures found
+error during command execution: no signatures found
+(exit code 10)
+```
+
+The unsigned test tag was deleted immediately after (`az acr repository
+delete`); it exists nowhere but this record now.
+
+**One real, structural bug found — not in the workflow, in the registry's
+own configuration**: the push job failed with `ERROR: Looks like you don't
+have access to registry ... publicNetworkAccess`. `acrnovabankaidev` had
+`publicNetworkAccess: Disabled` (same category as OpenAI/Search) **and** a
+coupled `exportPolicy: disabled` — Azure refuses to enable public access
+while exports are disabled, since that combination would let images leave
+the registry over the network the disabled-export control exists to
+block. With explicit approval (this is a stronger control than a simple
+firewall — it is an anti-exfiltration policy, not just network ACLs), both
+were enabled together; `adminUserEnabled` remains `false`, so AAD/RBAC
+(the `AcrPush` role already granted to the CI identity in ADR-013) is
+still the only way to push or pull.

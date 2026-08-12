@@ -44,7 +44,8 @@ rows so neither claim borrows the other's evidence.
 | Governance | `VERIFIED-LOCAL` | Human approval, ownership, privacy/model-risk gates and ADRs | `make operational-readiness` | Formal organisational approvals still required — see `docs/governance/` |
 | Security | `VERIFIED-LOCAL` | RBAC, minimisation, threat model, secrets/SAST/SCA/IaC/container/SBOM/signing gates | `make security`, `make sign-image` | External penetration test remains pre-production work |
 | Delivery — CD pipeline identity | `VERIFIED-LIVE` | Azure OIDC federation: app registration, federated credentials, role assignments, protected Environments (ADR-013) | `docs/ci-cd-azure-setup.md` | Identity works; publish/apply/deploy jobs not yet dispatched |
-| Delivery — container publish / apply / deploy | `UNVERIFIED` | `container-publish.yaml`, `terraform-apply.yaml`, `deploy.yaml` | `actionlint`-clean, identity-ready | Never dispatched for real |
+| Delivery — container publish (build/scan/sign/push) | `VERIFIED-LIVE` | `container-publish.yaml` | `docs/portfolio/live-verification.md`, run [31637091014](https://github.com/macod-spec/enterprise-genai-agent-platform/actions/runs/31637091014) | Real signed image in ACR, verified from a separate step, plus a negative proof (unsigned tag fails verification) |
+| Delivery — terraform apply / AKS deploy | `UNVERIFIED` | `terraform-apply.yaml`, `deploy.yaml` | `actionlint`-clean, identity-ready | Never dispatched for real |
 | Operations | `VERIFIED-LOCAL` | Runbook, recovery exercise, SLOs, incident roles and evidence reports | `make operational-readiness` | Local recovery proves mechanics, not production RPO/RTO |
 
 Generated, sanitised evidence is stored under ignored `.security-reports/` so

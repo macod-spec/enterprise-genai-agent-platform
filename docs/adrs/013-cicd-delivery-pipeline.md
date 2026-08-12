@@ -72,12 +72,17 @@ stays the only way in). Full detail in `docs/ci-cd-azure-setup.md`.
 ## Consequences
 
 - The delivery pipeline is complete as *code* (`actionlint` reports zero
-  issues across all seven workflows) and `terraform-plan.yaml` is now a
-  *proven, live capability*: a real OIDC-authenticated run against real
-  remote state. `container-publish.yaml` and `terraform-apply.yaml` are
-  identity- and RBAC-ready but have not actually been dispatched (a
-  container push and a real infrastructure apply are each a further,
-  separate decision). `deploy.yaml` cannot be proven live until AKS exists.
+  issues across all seven workflows) and both `terraform-plan.yaml` and
+  `container-publish.yaml` are now *proven, live capabilities*: real
+  OIDC-authenticated runs against real remote state and a real registry,
+  respectively. The container-publish run also found a real bug in the
+  target infrastructure, not the workflow: ACR's `publicNetworkAccess` and
+  `exportPolicy` were both disabled and coupled (Azure refuses to enable
+  one without the other), blocking the push entirely — see
+  `docs/portfolio/live-verification.md`. `terraform-apply.yaml` is
+  identity- and RBAC-ready but has not actually been dispatched (a real
+  infrastructure apply is a further, separate decision). `deploy.yaml`
+  cannot be proven live until AKS exists.
 - `deploy.yaml` will fail cleanly at `az aks get-credentials` until AKS
   exists. That is no longer a hard quota block (`docs/azure-diagnosis.md`
   found and routed around the actual cause) — AKS just hasn't been created,
