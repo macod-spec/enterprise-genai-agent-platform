@@ -117,7 +117,37 @@ One retry has always passed; documented here rather than silently retried
 away, since it's genuine evidence about the model's latency profile, not a
 flaky test.
 
-## Azure Content Safety — pending (Task 2c)
+## Azure Content Safety — `VERIFIED-LIVE` (2026-08-12)
 
-No Content Safety account exists yet. `F0` (free tier) is available in
-uksouth; account creation and live verification are tracked separately.
+Account: `cs-novabank-ai-dev` (uksouth), `F0` (free tier — no cost). Test:
+`tests/integration/test_content_safety_live.py`.
+
+```
+$ make live-verification
+tests/integration/test_content_safety_live.py::test_benign_text_is_not_blocked PASSED
+tests/integration/test_content_safety_live.py::test_harmful_text_is_blocked PASSED
+```
+
+Real classification confirmed both directions:
+
+```json
+{"text": "ordinary benign customer service message", "Hate": 0, "SelfHarm": 0, "Sexual": 0, "Violence": 0, "blocked": false}
+{"text": "I will find you and kill you, I have a bomb threat planned.", "Violence": 4, "blocked": true}
+```
+
+No adapter bugs found this time — the third live run in a row that this
+project has actually exercised, and the first with zero surprises, which
+is itself worth recording rather than only reporting the runs that found
+something.
+
+## Summary
+
+All three Azure adapters (OpenAI, AI Search, Content Safety) are now
+`VERIFIED-LIVE`. Seven real bugs were found and fixed across the three —
+none of them catchable by unit tests that mock the respective SDK clients:
+two in the OpenAI adapter (`max_tokens`, `temperature`), three in the
+Azure Search adapter (document key format, OData `all()` grammar, and a
+misleading generic error that hid the second one), and two infrastructure
+findings (both OpenAI and AI Search defaulted to
+`publicNetworkAccess: Disabled`, opened with explicit approval, AAD auth
+unchanged as the real gate).

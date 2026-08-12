@@ -6,9 +6,12 @@ not represented as a live production banking system.
 ## Current limitations
 
 - All records and policies are fictional; the default model, embeddings and
-  Content Safety provider are free, deterministic mocks. Keyless Azure OpenAI,
-  Azure AI Search and Azure Content Safety adapters exist behind the same
-  interfaces but are unverified against a live Azure endpoint.
+  Content Safety provider are free, deterministic mocks so local development
+  and CI incur no cost. Keyless Azure OpenAI, Azure AI Search and Azure
+  Content Safety adapters exist behind the same interfaces and are now
+  live-verified (`docs/portfolio/live-verification.md`) — seven real bugs
+  were found and fixed only by running them against real Azure endpoints,
+  none catchable by a test that mocks the respective SDK client.
 - Local identity headers are accepted only in `local` and `test` environments.
 - PostgreSQL, Redis and authenticated remote MCP are locally exercised adapters.
 - PII detection uses the small `en_core_web_sm` spaCy model, a real accuracy

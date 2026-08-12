@@ -98,9 +98,9 @@ authenticate: they need a one-time Azure identity federation step
 | --- | --- | --- |
 | Local headers and RBAC | Microsoft Entra ID and APIM policies | Future |
 | Docker and kind/Helm | ACR and private AKS | `deploy.yaml` implemented; AKS preflight now passes live (`docs/azure-diagnosis.md`), not yet applied (real ongoing cost, held for sign-off) |
-| Local deterministic model | Azure OpenAI (keyless, `DefaultAzureCredential`) | Adapter implemented, unverified against a live endpoint |
-| Content moderation | Azure AI Content Safety (keyless) | Adapter implemented, unverified against a live endpoint |
-| Local RAG index | Azure AI Search, server-side entitlement-filtered hybrid retrieval | Adapter implemented, unverified against a live index |
+| Local deterministic model | Azure OpenAI (keyless, `DefaultAzureCredential`) | `VERIFIED-LIVE` — see `docs/portfolio/live-verification.md` |
+| Content moderation | Azure AI Content Safety (keyless) | `VERIFIED-LIVE` — see `docs/portfolio/live-verification.md` |
+| Local RAG index | Azure AI Search, server-side entitlement-filtered hybrid retrieval | `VERIFIED-LIVE` — see `docs/portfolio/live-verification.md` |
 | PostgreSQL/Redis adapters | Managed PostgreSQL and Azure Managed Redis | Future |
 | OpenTelemetry/Prometheus | Azure Monitor/Application Insights plus managed metrics | Future |
 | Local signature exercise | Workload-identity keyless signing and provenance | `container-publish.yaml` implements cosign keyless signing; not yet run live |
