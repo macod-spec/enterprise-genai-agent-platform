@@ -49,6 +49,11 @@ class Settings(BaseSettings):
     content_safety_thresholds: dict[str, int] = Field(
         default_factory=lambda: {"Hate": 4, "SelfHarm": 4, "Sexual": 4, "Violence": 4}
     )
+    rag_provider: Literal["local", "azure_search"] = "local"
+    azure_search_endpoint: str | None = None
+    azure_search_index_name: str = "novabank-policy-chunks"
+    rag_synthesis_model: str = "mock-deterministic"
+    rag_groundedness_minimum_term_overlap: float = Field(default=0.5, ge=0.0, le=1.0)
     mcp_tool_timeout_seconds: float = Field(default=2.0, gt=0, le=30)
     mcp_max_attempts: int = Field(default=2, ge=1, le=3)
     mcp_rate_limit: int = Field(default=30, ge=1, le=1_000)
@@ -83,6 +88,8 @@ class Settings(BaseSettings):
             raise ValueError(
                 "CONTENT_SAFETY_ENDPOINT is required when CONTENT_SAFETY_PROVIDER=azure"
             )
+        if self.rag_provider == "azure_search" and not self.azure_search_endpoint:
+            raise ValueError("AZURE_SEARCH_ENDPOINT is required when RAG_PROVIDER=azure_search")
         return self
 
 

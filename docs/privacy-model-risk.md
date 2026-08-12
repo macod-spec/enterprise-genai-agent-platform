@@ -21,5 +21,11 @@ until the following evidence has an owner, approval and review date.
 - establish drift thresholds, revalidation cadence and rollback criteria;
 - require independent approval for material model, tool or policy changes.
 
-The offline evaluation suite is engineering evidence only. It does not constitute
-privacy, legal, compliance or model-risk approval.
+Engineering evidence exists for parts of this list: a deny-by-default model
+allowlist and per-tenant budget (ADR-006), Presidio-backed PII detection (ADR-009),
+an Azure Content Safety guard (ADR-010), and a deterministic groundedness scorer
+for synthesized RAG answers with its own CI-integrated correctness gate (ADR-012).
+This is engineering evidence only, produced against a deterministic mock model and
+fictional data. It does not constitute privacy, legal, compliance or model-risk
+approval, and does not substitute for bias testing, drift monitoring or
+independent review against a live model.

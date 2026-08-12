@@ -1,0 +1,96 @@
+name: Deploy to AKS (Helm, digest-pinned)
+
+# Requires a real AKS cluster, which is currently blocked on Azure compute
+# quota (see docs/roadmap.md) — this workflow is implemented and will run
+# cleanly against `kind` logic-for-logic with scripts/kind-integration.sh,
+# but has not been exercised against a live AKS cluster. It will fail at the
+# `az aks get-credentials` step until AKS exists; that is the correct,
+# honest failure mode rather than silently skipping.
+on:
+  workflow_dispatch:
+    inputs:
+      image_digest:
+        description: 'Full pushed image digest, e.g. sha256:...  (from container-publish.yaml)'
+        required: true
+      confirm:
+        description: 'Type DEPLOY to confirm deploying to the live cluster'
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Reject unconfirmed runs
+        if: github.event.inputs.confirm != 'DEPLOY'
+        run: |
+          echo "::error::Re-run with confirm=DEPLOY to deploy to the live cluster."
+          exit 1
+      - name: Reject a non-digest image reference
+        if: ${{ !startsWith(github.event.inputs.image_digest, 'sha256:') }}
+        run: |
+          echo "::error::image_digest must be a real sha256 digest, not a floating tag."
+          exit 1
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: azure/setup-helm@v4
+        with: {version: v3.18.4}
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Get AKS credentials (workload identity, no static kubeconfig secret)
+        run: |
+          az aks get-credentials \
+            --resource-group "${{ vars.AKS_RESOURCE_GROUP }}" \
+            --name "${{ vars.AKS_CLUSTER_NAME }}" \
+            --overwrite-existing
+      - name: Deploy the digest-pinned image
+        run: |
+          helm upgrade --install enterprise-genai infrastructure/helm/agent-platform \
+            --namespace agent-platform \
+            --create-namespace \
+            --set image.repository="${{ vars.ACR_LOGIN_SERVER }}/enterprise-agent-platform" \
+            --set image.digest="${{ github.event.inputs.image_digest }}" \
+            --wait \
+            --timeout 5m
+      - name: Verify rollout
+        run: |
+          kubectl rollout status deployment/enterprise-genai-gateway \
+            --namespace agent-platform --timeout=120s
+      - name: Smoke test
+        run: |
+          kubectl port-forward --namespace agent-platform \
+            service/enterprise-genai-gateway 18001:8000 &
+          pid=$!
+          trap 'kill "${pid}"' EXIT
+          for _ in $(seq 1 30); do
+            curl --fail --silent http://127.0.0.1:18001/health/live && break
+            sleep 1
+          done
+          curl --fail --silent http://127.0.0.1:18001/health/live | grep -q '"status":"ok"'
+          curl --fail --silent http://127.0.0.1:18001/health/ready | grep -q '"status":"ready"'
+      - name: Capture evidence
+        if: always()
+        run: |
+          kubectl get deployment enterprise-genai-gateway --namespace agent-platform \
+            -o json > deployment-evidence.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: deploy-evidence
+          path: deployment-evidence.json
+          retention-days: 30
+      - name: Rollback on failure
+        if: failure()
+        run: |
+          echo "::warning::Deployment failed verification; rolling back to the previous revision."
+          helm rollback enterprise-genai --namespace agent-platform || true

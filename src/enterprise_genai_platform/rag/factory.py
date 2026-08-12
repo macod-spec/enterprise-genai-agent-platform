@@ -2,6 +2,8 @@
 
 from importlib.resources import files
 
+from enterprise_genai_platform.gateway.config import Settings
+from enterprise_genai_platform.rag.azure_search import AzureSearchIndex
 from enterprise_genai_platform.rag.embedding import LocalHashEmbedding
 from enterprise_genai_platform.rag.index import LocalVectorIndex
 from enterprise_genai_platform.rag.ingestion import parse_policy_document
@@ -58,3 +60,22 @@ def build_default_retriever() -> AuthorizedRetriever:
             document = parse_policy_document(resource.read_bytes(), source_name=resource.name)
             index.add(chunk_document(document, embedding))
     return AuthorizedRetriever(index, embedding)
+
+
+def build_retriever(settings: Settings) -> AuthorizedRetriever:
+    """Select the configured retrieval backend (ADR-011).
+
+    `local` indexes the bundled documents in-process at startup. `azure_search`
+    assumes an index that is already created and populated by a separate,
+    offline ingestion step (`scripts/ingest_azure_search.py`); the serving
+    path here never mutates the index, only queries it.
+    """
+    if settings.rag_provider == "azure_search":
+        if not settings.azure_search_endpoint:
+            raise ValueError("Azure AI Search endpoint is required for the azure_search provider")
+        index = AzureSearchIndex(
+            endpoint=settings.azure_search_endpoint,
+            index_name=settings.azure_search_index_name,
+        )
+        return AuthorizedRetriever(index, LocalHashEmbedding())
+    return build_default_retriever()

@@ -1,5 +1,6 @@
 """Secure ingestion, retrieval authorization, relevance, and citation tests."""
 
+import asyncio
 import hashlib
 
 import pytest
@@ -89,9 +90,11 @@ def test_chunking_is_deterministic_and_validated() -> None:
 def test_retrieval_returns_relevant_citation_and_provenance() -> None:
     retriever = build_default_retriever()
 
-    result = retriever.retrieve(
-        "delayed faster payment acknowledgement escalation",
-        caller_roles=frozenset({"agent.invoke"}),
+    result = asyncio.run(
+        retriever.retrieve(
+            "delayed faster payment acknowledgement escalation",
+            caller_roles=frozenset({"agent.invoke"}),
+        )
     )
 
     assert result.hits
@@ -104,15 +107,19 @@ def test_retrieval_returns_relevant_citation_and_provenance() -> None:
 def test_retrieval_enforces_all_document_roles_before_vector_search() -> None:
     retriever = build_default_retriever()
 
-    denied = retriever.retrieve(
-        "customer contact data privacy masking",
-        caller_roles=frozenset({"agent.invoke"}),
-        limit=5,
+    denied = asyncio.run(
+        retriever.retrieve(
+            "customer contact data privacy masking",
+            caller_roles=frozenset({"agent.invoke"}),
+            limit=5,
+        )
     )
-    allowed = retriever.retrieve(
-        "customer contact data privacy masking",
-        caller_roles=frozenset({"agent.invoke", "privacy.read"}),
-        limit=5,
+    allowed = asyncio.run(
+        retriever.retrieve(
+            "customer contact data privacy masking",
+            caller_roles=frozenset({"agent.invoke", "privacy.read"}),
+            limit=5,
+        )
     )
 
     assert all(hit.citation.document_id != "POL-DATA-003" for hit in denied.hits)
@@ -123,9 +130,9 @@ def test_retrieval_rejects_unbounded_queries_and_limits() -> None:
     retriever = build_default_retriever()
 
     with pytest.raises(ValueError, match="query length"):
-        retriever.retrieve("", caller_roles=frozenset({"agent.invoke"}))
+        asyncio.run(retriever.retrieve("", caller_roles=frozenset({"agent.invoke"})))
     with pytest.raises(ValueError, match="result limit"):
-        retriever.retrieve("policy", caller_roles=frozenset({"agent.invoke"}), limit=6)
+        asyncio.run(retriever.retrieve("policy", caller_roles=frozenset({"agent.invoke"}), limit=6))
 
 
 def test_vector_components_reject_invalid_dimensions_and_duplicates() -> None:
@@ -143,4 +150,6 @@ def test_vector_components_reject_invalid_dimensions_and_duplicates() -> None:
     with pytest.raises(ValueError, match="Duplicate knowledge chunk"):
         index.add(chunks)
     with pytest.raises(ValueError, match="dimensions do not match"):
-        index.search((1.0,), caller_roles=frozenset({"agent.invoke"}), limit=1)
+        asyncio.run(
+            index.search("query", (1.0,), caller_roles=frozenset({"agent.invoke"}), limit=1)
+        )

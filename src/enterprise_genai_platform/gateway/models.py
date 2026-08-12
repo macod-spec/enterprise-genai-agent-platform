@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from enterprise_genai_platform.agents.base import AgentResult
 from enterprise_genai_platform.model_gateway import ChatMessage, TokenUsage
 from enterprise_genai_platform.models import RoutingDecision
+from enterprise_genai_platform.rag.models import Citation
 from enterprise_genai_platform.skills.models import SkillDefinition
 
 
@@ -70,3 +71,18 @@ class ModelGenerateResponse(StrictResponse):
     usage: TokenUsage
     estimated_cost_gbp: float
     finish_reason: str
+
+
+class RagAnswerRequest(StrictResponse):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    query: str = Field(min_length=1, max_length=500)
+
+
+class RagAnswerResponse(StrictResponse):
+    answer: str
+    citations: tuple[Citation, ...]
+    term_overlap_score: float
+    citations_found: tuple[str, ...]
+    fabricated_citations: tuple[str, ...]
+    is_grounded: bool

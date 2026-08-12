@@ -13,12 +13,13 @@ from enterprise_genai_platform.mcp_boundary.contracts import (
 )
 from enterprise_genai_platform.mcp_boundary.gateway import GovernedMCPGateway, ToolRegistration
 from enterprise_genai_platform.mcp_boundary.servers import CustomerTools, PaymentTools, PolicyTools
-from enterprise_genai_platform.rag import build_default_retriever
+from enterprise_genai_platform.rag import AuthorizedRetriever, build_default_retriever
 
 
 def build_local_mcp_gateway(
     repository: NovaBankRepository,
     *,
+    retriever: AuthorizedRetriever | None = None,
     timeout_seconds: float = 2.0,
     max_attempts: int = 2,
     rate_limit: int = 30,
@@ -26,7 +27,7 @@ def build_local_mcp_gateway(
 ) -> GovernedMCPGateway:
     customer = CustomerTools(repository)
     payments = PaymentTools(repository)
-    policy = PolicyTools(build_default_retriever())
+    policy = PolicyTools(retriever or build_default_retriever())
     gateway = GovernedMCPGateway(
         timeout_seconds=timeout_seconds,
         max_attempts=max_attempts,

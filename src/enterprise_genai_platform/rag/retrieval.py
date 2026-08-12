@@ -2,16 +2,16 @@
 
 from enterprise_genai_platform.metrics import RAG_HITS, RAG_RETRIEVALS
 from enterprise_genai_platform.rag.embedding import LocalHashEmbedding
-from enterprise_genai_platform.rag.index import LocalVectorIndex
+from enterprise_genai_platform.rag.index import VectorIndex
 from enterprise_genai_platform.rag.models import Citation, RetrievalHit, RetrievalResult
 
 
 class AuthorizedRetriever:
-    def __init__(self, index: LocalVectorIndex, embedding: LocalHashEmbedding) -> None:
+    def __init__(self, index: VectorIndex, embedding: LocalHashEmbedding) -> None:
         self._index = index
         self._embedding = embedding
 
-    def retrieve(
+    async def retrieve(
         self,
         query: str,
         *,
@@ -22,7 +22,8 @@ class AuthorizedRetriever:
             raise ValueError("Retrieval query length is invalid")
         if limit < 1 or limit > 5:
             raise ValueError("Retrieval result limit is invalid")
-        ranked = self._index.search(
+        ranked = await self._index.search(
+            query,
             self._embedding.embed(query),
             caller_roles=caller_roles,
             limit=limit,

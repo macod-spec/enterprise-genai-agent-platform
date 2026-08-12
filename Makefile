@@ -1,4 +1,4 @@
-.PHONY: bootstrap run format lint typecheck test evaluate reliability operator-demo operational-readiness portfolio-evidence portfolio-demo terraform-zero-plan azure-aks-preflight preproduction-readiness destroy audit secrets sast licenses lock-check check security container-security sign-image kind-integration durable-state-integration
+.PHONY: bootstrap run format lint typecheck test evaluate groundedness-evaluation reliability operator-demo operational-readiness portfolio-evidence portfolio-demo terraform-zero-plan azure-aks-preflight preproduction-readiness destroy audit secrets sast licenses lock-check check security container-security sign-image kind-integration durable-state-integration
 
 PYTHON := .venv/bin/python
 LOCAL_IMAGE := enterprise-genai-agent-platform:local
@@ -32,6 +32,9 @@ test:
 evaluate:
 	$(PYTHON) -m enterprise_genai_platform.evaluation.runner
 
+groundedness-evaluation:
+	$(PYTHON) scripts/groundedness-evaluation.py
+
 reliability:
 	$(PYTHON) scripts/load-failure-test.py
 
@@ -44,7 +47,7 @@ operational-readiness:
 portfolio-evidence:
 	$(PYTHON) scripts/portfolio-evidence.py
 
-portfolio-demo: evaluate reliability operator-demo operational-readiness portfolio-evidence
+portfolio-demo: evaluate groundedness-evaluation reliability operator-demo operational-readiness portfolio-evidence
 
 terraform-zero-plan:
 	./scripts/terraform-plan-zero.sh
@@ -78,7 +81,7 @@ lock-check:
 
 check: lint typecheck test
 
-security: check evaluate reliability operator-demo operational-readiness portfolio-evidence audit secrets lock-check licenses sast
+security: check evaluate groundedness-evaluation reliability operator-demo operational-readiness portfolio-evidence audit secrets lock-check licenses sast
 
 container-security:
 	mkdir -p $(SECURITY_REPORTS)
