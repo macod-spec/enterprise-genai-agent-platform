@@ -21,6 +21,8 @@ if [[ ! -f "${prerequisite_report}" ]]; then
   exit 1
 fi
 
+"${repo_root}/scripts/azure-aks-preflight.sh"
+
 state_resource_group="$(jq -r '.state_backend.resource_group' "${prerequisite_report}")"
 state_storage_account="$(jq -r '.state_backend.storage_account' "${prerequisite_report}")"
 state_container="$(jq -r '.state_backend.container' "${prerequisite_report}")"
@@ -41,6 +43,7 @@ terraform -chdir="${terraform_root}" plan -lock=true -input=false \
   -var='enable_deployment=true' \
   -var="deployment_confirmation=${deployment_confirmation}" \
   -var="aks_admin_group_object_ids=[\"${admin_group_id}\"]" \
+  -var="aks_system_node_vm_size=${AKS_SYSTEM_NODE_VM_SIZE:-Standard_D2s_v5}" \
   -var='budget_contact_emails=["mcleonard.od@outlook.com"]' \
   -out="${temporary_root}/approved.tfplan"
 

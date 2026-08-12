@@ -210,14 +210,34 @@ def test_terraform_default_plan_is_cost_locked_and_non_deploying() -> None:
 def test_azure_modules_use_private_identity_and_cost_controls() -> None:
     module_root = ROOT / "infrastructure/terraform/modules"
     compute = (module_root / "compute/main.tf").read_text(encoding="utf-8")
+    compute_variables = (module_root / "compute/variables.tf").read_text(encoding="utf-8")
     data = (module_root / "data/main.tf").read_text(encoding="utf-8")
     ai = (module_root / "ai/main.tf").read_text(encoding="utf-8")
     governance = (module_root / "governance/main.tf").read_text(encoding="utf-8")
     root = (ROOT / "infrastructure/terraform/main.tf").read_text(encoding="utf-8")
+    root_variables = (ROOT / "infrastructure/terraform/variables.tf").read_text(encoding="utf-8")
+    apply_script = (ROOT / "scripts/terraform-connected-apply.sh").read_text(encoding="utf-8")
+    aks_preflight = (ROOT / "scripts/azure-aks-preflight.sh").read_text(encoding="utf-8")
+    makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
 
     assert re.search(r"private_cluster_enabled\s*=\s*true", compute)
     assert re.search(r"local_account_disabled\s*=\s*true", compute)
     assert re.search(r"workload_identity_enabled\s*=\s*true", compute)
+    assert "vm_size                      = var.system_node_vm_size" in compute
+    assert "node_count                   = var.system_node_count" in compute
+    assert 'variable "system_node_vm_size"' in compute_variables
+    assert 'variable "aks_system_node_vm_size"' in root_variables
+    assert '!can(regex("^Standard_B", var.aks_system_node_vm_size))' in root_variables
+    assert '"${repo_root}/scripts/azure-aks-preflight.sh"' in apply_script
+    assert (
+        '-var="aks_system_node_vm_size=${AKS_SYSTEM_NODE_VM_SIZE:-Standard_D2s_v5}"' in apply_script
+    )
+    assert "FreeTrial*" in aks_preflight
+    assert 'spending_limit}" != "Off"' in aks_preflight
+    assert 'az vm list-usage --location "${location}"' in aks_preflight
+    assert 'az vm list-skus --location "${location}" --size "${aks_vm_size}"' in aks_preflight
+    assert '[[ "${aks_vm_size}" == Standard_B* ]]' in aks_preflight
+    assert "azure-aks-preflight:" in makefile
     assert re.search(r"public_network_access_enabled\s*=\s*false", data)
     assert re.search(r'public_network_access\s*=\s*"Disabled"', data)
     assert re.search(r"access_keys_authentication_enabled\s*=\s*false", data)

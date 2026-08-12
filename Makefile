@@ -1,4 +1,4 @@
-.PHONY: bootstrap run format lint typecheck test evaluate reliability operator-demo operational-readiness portfolio-evidence portfolio-demo terraform-zero-plan preproduction-readiness destroy audit secrets sast licenses lock-check check security container-security sign-image kind-integration durable-state-integration
+.PHONY: bootstrap run format lint typecheck test evaluate reliability operator-demo operational-readiness portfolio-evidence portfolio-demo terraform-zero-plan azure-aks-preflight preproduction-readiness destroy audit secrets sast licenses lock-check check security container-security sign-image kind-integration durable-state-integration
 
 PYTHON := .venv/bin/python
 LOCAL_IMAGE := enterprise-genai-agent-platform:local
@@ -48,6 +48,9 @@ portfolio-demo: evaluate reliability operator-demo operational-readiness portfol
 
 terraform-zero-plan:
 	./scripts/terraform-plan-zero.sh
+
+azure-aks-preflight:
+	./scripts/azure-aks-preflight.sh
 
 preproduction-readiness: terraform-zero-plan
 	$(PYTHON) scripts/preproduction-readiness.py

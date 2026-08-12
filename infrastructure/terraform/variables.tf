@@ -54,6 +54,26 @@ variable "aks_admin_group_object_ids" {
   }
 }
 
+variable "aks_system_node_vm_size" {
+  description = "AKS system node pool VM size. B-series is not allowed for system pools."
+  type        = string
+  default     = "Standard_D2s_v5"
+  validation {
+    condition     = can(regex("^Standard_", var.aks_system_node_vm_size)) && !can(regex("^Standard_B", var.aks_system_node_vm_size))
+    error_message = "AKS system node pool VM size must be a Standard non-B-series SKU."
+  }
+}
+
+variable "aks_system_node_count" {
+  description = "AKS system node pool count for the portfolio sandbox."
+  type        = number
+  default     = 1
+  validation {
+    condition     = var.aks_system_node_count >= 1 && var.aks_system_node_count <= 3
+    error_message = "AKS system node pool count must stay between 1 and 3 for the portfolio budget."
+  }
+}
+
 variable "budget_contact_emails" {
   description = "Reviewed cost-alert recipients; required only for an enabled deployment."
   type        = list(string)
