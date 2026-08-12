@@ -12,6 +12,14 @@ on:
       confirm:
         description: 'Type I_ACCEPT_AZURE_COSTS to confirm this will create billable resources'
         required: true
+      apply_targets:
+        description: >-
+          Optional: one Terraform resource address per line to scope this
+          apply with -target (e.g. a config-only change like ADR-014's
+          network settings). Leave empty for the full plan. A -target plan
+          still requires typed confirmation and protected-Environment
+          approval like any other apply.
+        required: false
 
 permissions:
   contents: read
@@ -48,6 +56,15 @@ jobs:
             -backend-config="key=enterprise-genai-agent-platform/dev.tfstate" \
             -backend-config="use_azuread_auth=true" \
             -backend-config="use_oidc=true"
+      - name: Build optional -target flags
+        id: targets
+        run: |
+          flags=""
+          while IFS= read -r address; do
+            [ -z "${address}" ] && continue
+            flags="${flags} -target=${address}"
+          done <<< "${{ github.event.inputs.apply_targets }}"
+          echo "flags=${flags}" >> "${GITHUB_OUTPUT}"
       - working-directory: infrastructure/terraform
         env:
           ARM_USE_OIDC: "true"
@@ -56,6 +73,7 @@ jobs:
             -input=false \
             -lock=true \
             -out=apply.tfplan \
+            ${{ steps.targets.outputs.flags }} \
             -var="subscription_id=${{ secrets.AZURE_SUBSCRIPTION_ID }}" \
             -var="enable_deployment=true" \
             -var="deployment_confirmation=I_ACCEPT_AZURE_COSTS" \

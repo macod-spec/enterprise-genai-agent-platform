@@ -275,8 +275,13 @@ def test_azure_modules_use_private_identity_and_cost_controls() -> None:
     assert re.search(r'public_network_access\s*=\s*"Disabled"', data)
     assert re.search(r"access_keys_authentication_enabled\s*=\s*false", data)
     assert re.search(r"password_auth_enabled\s*=\s*false", data)
-    assert len(re.findall(r"public_network_access_enabled\s*=\s*false", ai)) == 2
+    # ADR-014: opened to public network access (GitHub-hosted CD runners and
+    # live-verification tests have no route into the private VNet); AAD/RBAC
+    # is the real gate, asserted by the local-auth checks immediately below.
+    assert len(re.findall(r"public_network_access_enabled\s*=\s*true", ai)) == 2
     assert "local_auth_enabled" in ai and "local_authentication_enabled" in ai
+    assert re.search(r"local_auth_enabled\s*=\s*false", ai)
+    assert re.search(r"local_authentication_enabled\s*=\s*false", ai)
     assert re.search(r"local_authentication_enabled\s*=\s*false", governance)
     assert governance.count("notification {") == 3
     module_blocks = re.findall(r'module "[^}]+}', root, flags=re.DOTALL)
