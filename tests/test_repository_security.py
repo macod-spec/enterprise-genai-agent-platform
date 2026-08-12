@@ -168,6 +168,7 @@ def test_environment_age_guard_warns_without_cloud_credentials() -> None:
 
     assert 'cron: "17 * * * *"' in workflow
     assert "AZURE_ENV_CREATED_AT" in workflow
+    assert "PYTHONPATH: src" in workflow
     assert "issues: write" in workflow
     assert "gh issue list --state open" in workflow
     assert "az login" not in workflow
