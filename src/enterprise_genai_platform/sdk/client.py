@@ -12,12 +12,17 @@ class AgentPlatformClient:
         *,
         user: str,
         roles: frozenset[str],
+        tenant: str,
         timeout_seconds: float = 30,
     ) -> None:
         self._client = httpx.Client(
             base_url=base_url,
             timeout=httpx.Timeout(timeout_seconds),
-            headers={"X-Local-User": user, "X-Local-Roles": ",".join(sorted(roles))},
+            headers={
+                "X-Local-User": user,
+                "X-Local-Roles": ",".join(sorted(roles)),
+                "X-Local-Tenant": tenant,
+            },
         )
 
     def investigate(self, query: str, *, request_id: str) -> dict[str, Any]:
