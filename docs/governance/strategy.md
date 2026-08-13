@@ -48,21 +48,29 @@ infrastructure economics:
 
 ## Three horizons
 
-**Now — proven locally, real infrastructure where it counts.** Tenant
-isolation enforced and verified (state, retrieval, quota, metrics — see the
-evidence matrix), real Azure OpenAI/AI Search/Content Safety adapters, a
-live demo endpoint, a CI/CD pipeline with real OIDC identity and a real
-scoped Terraform apply already run. Held back from broader use by things
-that are genuine decisions, not blockers: an AKS apply is a real ongoing
-cost awaiting sign-off, and tenant identity is still local-header trust,
-not a verified Entra token claim.
+**Now — proven locally, one real gap named plainly.** Isolation *between*
+tenants is proven — given each caller's tenant claim is honest (state,
+retrieval, quota, metrics; see the evidence matrix and
+`docs/adrs/015-multi-tenancy-isolation.md`). It is not yet *enforced*
+against a dishonest one: `X-Local-Tenant` is a client-supplied header with
+nothing checking it against the caller's real identity, so every isolation
+mechanism above sits on top of an unverified claim today. This is not in
+the same category as the other current gaps — an AKS apply is a cost
+decision awaiting sign-off, this is a security gap awaiting an afternoon of
+work — and it is the immediate next item, ahead of everything else,
+specifically because closing it converts the platform's central claim from
+designed to enforced.
 
-**Next — the first real tenant, not a synthetic one.** Move one real,
-low-stakes internal use case onto the platform under the existing
-isolation model, with a real Entra-issued tenant claim replacing the local
-header, and AKS as the deployment target instead of the Container Apps
-demo path. This is the step that turns "the isolation model is proven" into
-"a real team is trusting it."
+**Next — real identity, then real usage.** Two separate steps, in order.
+First: resolve tenant from a verified Entra JWT claim instead of the local
+header — the RS256 JWT validation infrastructure already exists in this
+codebase for remote MCP auth (`mcp_boundary/remote_auth.py`), so this is
+extension, not a build-from-nothing. Second, once that's closed: move one
+real, low-stakes internal use case onto the platform under the existing
+isolation model, with AKS as the deployment target instead of the
+Container Apps demo path. That second step is the one that turns "the
+isolation model is proven" into "a real team is trusting it" — but it
+should not happen before the first.
 
 **Later — self-service onboarding at the rate the config-file model
 implies.** If onboarding truly stays a config change, the constraint on

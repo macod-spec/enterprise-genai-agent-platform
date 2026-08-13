@@ -64,6 +64,25 @@ not represented as a live production banking system.
   between sessions rather than left running. The Kubernetes ingress path
   this would eventually be replaced by (a single nginx controller,
   cert-manager TLS, host-based routing) has not been built yet.
+- **Tenant identity is not yet enforced, only isolated once claimed.**
+  `X-Local-Tenant` is a client-supplied header, not a verified claim: any
+  caller that can reach the endpoint can set it to `payment-disputes`,
+  `complaints-triage`, `kyc-review`, or `fraud-alerts` and receive that
+  tenant's correctly-scoped results, whether or not they have any actual
+  relationship to that tenant. Every isolation control this platform builds
+  — RLS, retrieval entitlement filtering, per-tenant budget, tenant-labelled
+  metrics — sits underneath that header and is only as trustworthy as it
+  is. `tests/test_tenancy_leakage.py` proves tenant A cannot see tenant B's
+  data *given each caller's tenant claim is honest*; it does not, and
+  cannot, prove a caller can't lie about which tenant it is, because
+  nothing currently checks. This is the same local-identity-header
+  limitation as caller identity generally (see above), but it is called out
+  separately here because it is the direct precondition for every
+  multi-tenancy claim in `docs/adrs/015-multi-tenancy-isolation.md` and the
+  evidence matrix — tenant isolation should be read as **designed and
+  locally proven under a trusted-claim assumption**, not as **enforced
+  end-to-end**, until tenant resolution comes from a verified Entra JWT
+  claim instead of this header.
 
 ## Mandatory production gates
 
