@@ -170,11 +170,23 @@ tenants.json` breaks all of these down by tenant.
   state, retrieve another tenant's documents (even when the top semantic
   match), exhaust another tenant's budget, see another tenant's metrics, or
   invoke a skill scoped to another tenant — the six things the design was
-  required to prove, not just the easy ones.
+  required to prove, not just the easy ones. This is proven **given each
+  caller's tenant claim is honest** — see the next bullet for why that
+  qualifier is load-bearing, not boilerplate.
 - Onboarding a tenant is genuinely a config-only change, mechanically
   enforced by CI, not just true by convention today.
-- Local/test-only tenant resolution is an explicit, gated limitation, not a
-  silent gap — it fails closed (503) outside `local`/`test`.
+- **Tenant identity is claimed, not verified — this is the one real gap in
+  the isolation story.** `X-Local-Tenant` is a client-supplied header with
+  nothing checking it against the caller's actual identity. Every
+  isolation mechanism this ADR describes (RLS, retrieval filtering,
+  budget, metrics) sits underneath that header and only isolates tenants
+  from each other correctly once a tenant has been decided — it does
+  nothing to stop a caller from deciding to be a tenant it isn't. Local/
+  test-only gating (503 outside `local`/`test`) bounds *where* this is
+  true, not *whether* it's true within that scope. Closing this means
+  resolving tenant from a verified Entra JWT claim instead of a header —
+  see "What was deliberately not isolated" below; this is the top
+  remaining item, ahead of everything else queued for this platform.
 
 ## What was deliberately not isolated, and why
 
@@ -198,9 +210,13 @@ tenants.json` breaks all of these down by tenant.
   narrower claim than "everything is tenant-labelled" and is stated as such
   here rather than left to be discovered as a gap.
 - **Real JWT-verified tenant claims.** Tenant resolution is local-identity
-  trust, the same limitation as caller identity generally
-  (`docs/portfolio/limitations.md`). Pre-production gate, not a technical
-  blocker specific to tenancy.
+  trust, the same mechanism as caller identity generally
+  (`docs/portfolio/limitations.md`), but the consequence is more severe here
+  than "not yet production-grade": every isolation guarantee in this ADR is
+  conditional on the tenant claim being honest, so this is not one
+  pre-production item among several — it is the precondition the rest of
+  the document's claims depend on, and the next thing to fix, not a
+  generic backlog entry.
 - **Durable, cross-replica budget ledgers.** `TenantBudgetPolicy` is
   in-process, same limitation already recorded for the model gateway
   (ADR-006) before this work; multi-tenancy inherits it rather than fixing
