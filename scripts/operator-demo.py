@@ -26,6 +26,7 @@ def request(
         headers={
             "X-Local-User": "local-operator",
             "X-Local-Roles": roles,
+            "X-Local-Tenant": "payment-disputes",
             "X-Request-ID": request_id,
         },
         json={"query": query},
@@ -52,7 +53,9 @@ def main() -> None:
         high_risk = request(client, SENSITIVE_QUERY, request_id="demo-human-review")
 
         high_risk_payload = high_risk.json()
-        approval = app.state.approvals.get(high_risk_payload["approval_id"])
+        approval = app.state.approvals.get(
+            high_risk_payload["approval_id"], tenant="payment-disputes"
+        )
         audit = app.state.mcp_gateway.audit.records[-1]
         query_hash = hashlib.sha256(SENSITIVE_QUERY.encode()).hexdigest()
         checks = {

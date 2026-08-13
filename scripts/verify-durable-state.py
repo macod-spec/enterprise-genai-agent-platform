@@ -26,11 +26,13 @@ def wait_until_connectable(factory: Callable[[], ApprovalStore], attempts: int =
 
 
 def verify(factory: Callable[[], ApprovalStore]) -> None:
+    tenant = "payment-disputes"
     store = factory()
     pending = store.create_pending(
         request_id="durable-integration-request",
         requester="local-integration",
         query="sensitive synthetic request that must not be retained",
+        tenant=tenant,
     )
     approval_id = pending.approval_id
     if len(pending.query_sha256) != 64:
@@ -38,7 +40,7 @@ def verify(factory: Callable[[], ApprovalStore]) -> None:
     store.close()
 
     reopened = factory()
-    persisted = reopened.get(approval_id)
+    persisted = reopened.get(approval_id, tenant=tenant)
     if persisted is None or persisted.status != "pending":
         raise RuntimeError("pending approval did not survive reconnect")
     approved = reopened.decide(
@@ -46,6 +48,7 @@ def verify(factory: Callable[[], ApprovalStore]) -> None:
         decision="approved",
         reviewer="local-reviewer",
         reason="local integration evidence checked",
+        tenant=tenant,
     )
     if approved.status != "approved":
         raise RuntimeError("approval decision was not persisted")
@@ -55,6 +58,7 @@ def verify(factory: Callable[[], ApprovalStore]) -> None:
             decision="rejected",
             reviewer="second-reviewer",
             reason="must be rejected atomically",
+            tenant=tenant,
         )
     except ValueError:
         pass

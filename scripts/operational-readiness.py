@@ -44,12 +44,13 @@ def recovery_exercise() -> dict[str, float | int | bool]:
             request_id="dr-exercise-request",
             requester="dr-exercise-operator",
             query=sensitive_query,
+            tenant="payment-disputes",
         )
         store.close()
         shutil.copy2(primary, backup)
         shutil.copy2(backup, restored)
         recovered = SQLiteApprovalStore(str(restored))
-        record = recovered.get(pending.approval_id)
+        record = recovered.get(pending.approval_id, tenant="payment-disputes")
         recovered.close()
         if record is None or record.status != "pending":
             raise RuntimeError("restored approval record failed integrity validation")
