@@ -1,0 +1,7 @@
+# Non-secret backend coordinates supplied by the platform owner after approval.
+resource_group_name  = "REPLACE_WITH_STATE_RESOURCE_GROUP"
+storage_account_name = "REPLACE_WITH_STATE_STORAGE_ACCOUNT"
+container_name       = "tfstate"
+key                  = "enterprise-genai-agent-platform/dev.tfstate"
+use_azuread_auth     = true
+use_oidc             = true

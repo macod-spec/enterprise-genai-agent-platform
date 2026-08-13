@@ -1,0 +1,31 @@
+apiVersion: scaffolder.backstage.io/v1beta3
+kind: Template
+metadata:
+  name: governed-genai-agent
+  title: Governed GenAI Agent
+  description: Scaffold an agent using the platform security and evaluation contract.
+spec:
+  owner: ai-platform
+  type: service
+  parameters:
+    - title: Ownership and risk
+      required: [name, owner, dataClassification]
+      properties:
+        name: {title: Agent name, type: string, pattern: '^[a-z][a-z0-9-]+$'}
+        owner: {title: Owning team, type: string}
+        dataClassification:
+          title: Data classification
+          type: string
+          enum: [internal, confidential]
+        humanApprovalRequired: {title: Human approval required, type: boolean, default: true}
+  steps:
+    - id: fetch
+      name: Fetch governed skeleton
+      action: fetch:template
+      input:
+        url: ../../../platform-templates/agent-template
+        values:
+          name: ${{ parameters.name }}
+          owner: ${{ parameters.owner }}
+  output:
+    links: []

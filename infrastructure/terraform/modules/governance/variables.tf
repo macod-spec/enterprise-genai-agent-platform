@@ -1,0 +1,9 @@
+variable "name" { type = string }
+variable "location" { type = string }
+variable "resource_group_name" { type = string }
+variable "resource_group_id" { type = string }
+variable "log_analytics_workspace_id" { type = string }
+variable "monthly_budget_gbp" { type = number }
+variable "budget_contact_emails" { type = list(string) }
+variable "budget_start" { type = string }
+variable "tags" { type = map(string) }

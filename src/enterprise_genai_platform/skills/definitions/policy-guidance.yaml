@@ -1,0 +1,12 @@
+name: policy-guidance
+version: 1.0.0
+description: Retrieve authorized fictional policy evidence with stable citations.
+owner: {team: ai-governance, contact: ai-governance@novabank.example}
+agent: policy
+model: {provider: mock, model: deterministic-router-v1, max_input_tokens: 2000, max_output_tokens: 800}
+allowed_tools: [policy.search]
+data_classification: internal
+approval: {required_for: [policy-exception], approver_role: policy.approver}
+slo: {availability_percent: 99.9, latency_p95_ms: 2500}
+evaluation: {suite: policy-guidance-v1, minimum_score: 0.90}
+governance_state: approved

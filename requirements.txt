@@ -1,0 +1,2 @@
+# Runtime dependencies will be added with the first application component.
+# Development and security tooling is declared in pyproject.toml.

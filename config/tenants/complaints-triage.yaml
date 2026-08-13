@@ -1,0 +1,28 @@
+# Onboarding a new tenant is adding a file here — nothing else. Platform
+# code must never reference "complaints-triage" by name (enforced in CI by
+# scripts/check-tenant-drift.sh); it only ever reads this bundle through the
+# tenancy registry, resolved from the caller's authenticated tenant claim.
+name: complaints-triage
+system_prompt: >
+  You triage synthetic customer complaints for NovaBank. Classify severity,
+  identify regulator-referencing or financial-loss complaints for immediate
+  escalation, and cite the policy evidence behind every recommendation.
+allowed_skills:
+  - policy-guidance
+model_tier: mid
+memory_policy:
+  approval_state_ttl_days: 30
+  persists:
+    - approval_id
+    - request_id
+    - query_sha256
+    - status
+  does_not_persist:
+    - raw_query_text
+    - complainant_pii
+entitlements:
+  - complaints
+  - policy
+token_budget_gbp: 5.0
+risk_tier: medium
+cost_centre: CC-COMPLAINTS-TRIAGE

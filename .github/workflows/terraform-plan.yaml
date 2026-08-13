@@ -1,0 +1,77 @@
+name: Terraform connected plan (review only, never applies)
+
+# Complements terraform-zero-resource-plan in ci.yaml, which runs offline
+# (-backend=false) on every PR and asserts the default plan changes nothing.
+# This workflow is the connected counterpart: it logs into the real
+# subscription to produce a genuine, reviewable plan against remote state,
+# but it only ever plans. Nothing here can create, change or destroy a
+# resource — that is terraform-apply.yaml, a separate, more tightly gated
+# workflow.
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  connected-plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: azure-plan
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: hashicorp/setup-terraform@v3
+        with: {terraform_version: "1.15.6", terraform_wrapper: false}
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Terraform init (real remote state, Azure AD auth, no shared key)
+        working-directory: infrastructure/terraform
+        run: |
+          terraform init \
+            -input=false \
+            -backend-config="resource_group_name=rg-novabank-ai-tfstate" \
+            -backend-config="storage_account_name=${{ vars.AZURE_STATE_STORAGE_ACCOUNT }}" \
+            -backend-config="container_name=tfstate" \
+            -backend-config="key=enterprise-genai-agent-platform/dev.tfstate" \
+            -backend-config="use_azuread_auth=true" \
+            -backend-config="use_oidc=true"
+      - name: Terraform validate
+        working-directory: infrastructure/terraform
+        run: terraform validate
+      - name: Terraform plan (enable_deployment=true; plan only, never applied)
+        working-directory: infrastructure/terraform
+        env:
+          ARM_USE_OIDC: "true"
+        run: |
+          terraform plan \
+            -input=false \
+            -lock=true \
+            -out=connected.tfplan \
+            -var="subscription_id=${{ secrets.AZURE_SUBSCRIPTION_ID }}" \
+            -var="enable_deployment=true" \
+            -var="deployment_confirmation=I_ACCEPT_AZURE_COSTS" \
+            -var="aks_admin_group_object_ids=[\"${{ vars.AZURE_AKS_ADMIN_GROUP_ID }}\"]" \
+            -var="budget_contact_emails=[\"${{ vars.BUDGET_CONTACT_EMAIL }}\"]"
+          terraform show -no-color connected.tfplan > connected-plan.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: terraform-connected-plan
+          path: infrastructure/terraform/connected-plan.txt
+          retention-days: 14
+      - name: Plan summary
+        working-directory: infrastructure/terraform
+        run: |
+          {
+            echo "### Terraform connected plan"
+            echo '```'
+            tail -n 40 connected-plan.txt
+            echo '```'
+            echo "Full plan is attached as the terraform-connected-plan artifact."
+          } >> "${GITHUB_STEP_SUMMARY}"

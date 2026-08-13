@@ -1,0 +1,43 @@
+{
+  "retrieved_at": "2026-08-12",
+  "currency": "GBP",
+  "region": "uksouth",
+  "source": "https://prices.azure.com/api/retail/prices",
+  "source_type": "Microsoft unauthenticated public retail price; no discount",
+  "superseded_pricing": [
+    {
+      "retrieved_at": "2026-08-11",
+      "component": "AKS Linux system node compute",
+      "arm_sku_name": "Standard_D2s_v5",
+      "meter_name": "D2s v5",
+      "unit_price_gbp": 0.0841,
+      "estimated_monthly_gbp": 61.393,
+      "superseded_reason": "Standard_D2s_v5 has a 0-vCPU family quota and a NotAvailableForSubscription restriction on this subscription in uksouth (docs/azure-diagnosis.md); default switched to Standard_D2ns_v6, which this subscription can actually use."
+    }
+  ],
+  "priced_components": [
+    {
+      "component": "AKS Linux system node compute",
+      "arm_sku_name": "Standard_D2ns_v6",
+      "meter_name": "D2ns v6",
+      "unit": "1 Hour",
+      "unit_price_gbp": 0.1318,
+      "assumed_units_month": 730,
+      "estimated_monthly_gbp": 96.214
+    }
+  ],
+  "priced_lower_bound_gbp": 96.214,
+  "terraform_budget_default_gbp": 50,
+  "within_budget": false,
+  "unpriced_components": [
+    "ACR Premium",
+    "Key Vault transactions",
+    "Log Analytics ingestion",
+    "private endpoints and networking",
+    "PostgreSQL Flexible Server",
+    "Redis",
+    "Azure AI Search",
+    "Azure OpenAI token usage"
+  ],
+  "decision": "BLOCK_NON_ZERO_PLAN_PENDING_COMPLETE_SUBSCRIPTION_ESTIMATE"
+}

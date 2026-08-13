@@ -1,0 +1,135 @@
+name: Terraform connected apply (creates real, billable Azure resources)
+
+# The most tightly gated workflow in this repository. Two independent
+# safeguards before anything is created: a typed confirmation input, and a
+# protected GitHub Environment requiring manual review approval. The apply
+# job applies exactly the plan file the plan job produced and a reviewer
+# inspected — it never re-plans and applies in the same step, so approval is
+# always against what was actually reviewed.
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type I_ACCEPT_AZURE_COSTS to confirm this will create billable resources'
+        required: true
+      apply_targets:
+        description: >-
+          Optional: one Terraform resource address per line to scope this
+          apply with -target (e.g. a config-only change like ADR-014's
+          network settings). Leave empty for the full plan. A -target plan
+          still requires typed confirmation and protected-Environment
+          approval like any other apply.
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Reject unconfirmed runs
+        if: github.event.inputs.confirm != 'I_ACCEPT_AZURE_COSTS'
+        run: |
+          echo "::error::Re-run with confirm=I_ACCEPT_AZURE_COSTS to plan a real apply."
+          exit 1
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: hashicorp/setup-terraform@v3
+        with: {terraform_version: "1.15.6", terraform_wrapper: false}
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - working-directory: infrastructure/terraform
+        run: |
+          terraform init \
+            -input=false \
+            -backend-config="resource_group_name=rg-novabank-ai-tfstate" \
+            -backend-config="storage_account_name=${{ vars.AZURE_STATE_STORAGE_ACCOUNT }}" \
+            -backend-config="container_name=tfstate" \
+            -backend-config="key=enterprise-genai-agent-platform/dev.tfstate" \
+            -backend-config="use_azuread_auth=true" \
+            -backend-config="use_oidc=true"
+      - name: Build optional -target flags
+        id: targets
+        run: |
+          flags=""
+          while IFS= read -r address; do
+            [ -z "${address}" ] && continue
+            flags="${flags} -target=${address}"
+          done <<< "${{ github.event.inputs.apply_targets }}"
+          echo "flags=${flags}" >> "${GITHUB_OUTPUT}"
+      - working-directory: infrastructure/terraform
+        env:
+          ARM_USE_OIDC: "true"
+        run: |
+          terraform plan \
+            -input=false \
+            -lock=true \
+            -out=apply.tfplan \
+            ${{ steps.targets.outputs.flags }} \
+            -var="subscription_id=${{ secrets.AZURE_SUBSCRIPTION_ID }}" \
+            -var="enable_deployment=true" \
+            -var="deployment_confirmation=I_ACCEPT_AZURE_COSTS" \
+            -var="aks_admin_group_object_ids=[\"${{ vars.AZURE_AKS_ADMIN_GROUP_ID }}\"]" \
+            -var="budget_contact_emails=[\"${{ vars.BUDGET_CONTACT_EMAIL }}\"]"
+          terraform show -no-color apply.tfplan > apply-plan.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: terraform-apply-plan
+          path: |
+            infrastructure/terraform/apply.tfplan
+            infrastructure/terraform/apply-plan.txt
+          retention-days: 3
+      - run: |
+          {
+            echo "### Plan to be applied (review before approving the apply job)"
+            echo '```'
+            tail -n 60 infrastructure/terraform/apply-plan.txt
+            echo '```'
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+  apply:
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: azure-apply
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: hashicorp/setup-terraform@v3
+        with: {terraform_version: "1.15.6", terraform_wrapper: false}
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: terraform-apply-plan
+          path: infrastructure/terraform
+      - working-directory: infrastructure/terraform
+        run: |
+          terraform init \
+            -input=false \
+            -backend-config="resource_group_name=rg-novabank-ai-tfstate" \
+            -backend-config="storage_account_name=${{ vars.AZURE_STATE_STORAGE_ACCOUNT }}" \
+            -backend-config="container_name=tfstate" \
+            -backend-config="key=enterprise-genai-agent-platform/dev.tfstate" \
+            -backend-config="use_azuread_auth=true" \
+            -backend-config="use_oidc=true"
+      - name: Apply exactly the plan a reviewer approved
+        working-directory: infrastructure/terraform
+        env:
+          ARM_USE_OIDC: "true"
+        run: terraform apply -input=false -auto-approve apply.tfplan
+      - run: echo "Applied plan reviewed and approved in the plan job of this run." >> "${GITHUB_STEP_SUMMARY}"

@@ -1,0 +1,46 @@
+name: Azure environment age guard
+
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+env:
+  PYTHONPATH: src
+
+jobs:
+  warn-after-24-hours:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Require environment creation timestamp
+        if: ${{ vars.AZURE_ENV_CREATED_AT == '' }}
+        run: |
+          echo '::error::Set repository variable AZURE_ENV_CREATED_AT to an ISO-8601 UTC timestamp when Azure apply begins.'
+          exit 1
+      - name: Calculate environment age
+        id: age
+        if: ${{ vars.AZURE_ENV_CREATED_AT != '' }}
+        run: >-
+          python3 scripts/environment_age_check.py
+          --created-at '${{ vars.AZURE_ENV_CREATED_AT }}'
+          --max-hours 24
+      - name: Open deduplicated teardown warning
+        if: ${{ steps.age.outputs.overdue == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          AGE_HOURS: ${{ steps.age.outputs.age_hours }}
+        run: |
+          title='Azure demo environment exceeded 24-hour lifetime'
+          existing="$(gh issue list --state open --search "${title} in:title" --json number --jq '.[0].number // empty')"
+          if [[ -z "${existing}" ]]; then
+            gh issue create --title "${title}" --label cost-control --body "The Azure demo environment is ${AGE_HOURS} hours old. Run the reviewed make destroy procedure in docs/cost.md."
+          else
+            echo "Open warning already exists as issue #${existing}"
+          fi

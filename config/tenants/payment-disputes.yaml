@@ -1,0 +1,29 @@
+# Onboarding a new tenant is adding a file here — nothing else. Platform
+# code must never reference "payment-disputes" by name (enforced in CI by
+# scripts/check-tenant-drift.sh); it only ever reads this bundle through the
+# tenancy registry, resolved from the caller's authenticated tenant claim.
+name: payment-disputes
+system_prompt: >
+  You investigate synthetic payment disputes for NovaBank. Cite evidence for
+  every claim. Never execute a refund, reversal, or resend — recommend and
+  route to human approval.
+allowed_skills:
+  - payment-investigation
+  - customer-profile
+model_tier: strong
+memory_policy:
+  approval_state_ttl_days: 90
+  persists:
+    - approval_id
+    - request_id
+    - query_sha256
+    - status
+  does_not_persist:
+    - raw_query_text
+    - customer_pii
+entitlements:
+  - transactions
+  - customer
+token_budget_gbp: 15.0
+risk_tier: high
+cost_centre: CC-PAYMENTS-DISPUTES

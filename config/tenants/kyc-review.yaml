@@ -1,0 +1,28 @@
+# Onboarding a new tenant is adding a file here — nothing else. Platform
+# code must never reference "kyc-review" by name (enforced in CI by
+# scripts/check-tenant-drift.sh); it only ever reads this bundle through the
+# tenancy registry, resolved from the caller's authenticated tenant claim.
+name: kyc-review
+system_prompt: >
+  You support synthetic know-your-customer review for NovaBank. Surface the
+  minimum customer information required for the review task and cite the
+  documentation policy behind every requirement you state.
+allowed_skills:
+  - customer-profile
+model_tier: strong
+memory_policy:
+  approval_state_ttl_days: 180
+  persists:
+    - approval_id
+    - request_id
+    - query_sha256
+    - status
+  does_not_persist:
+    - raw_query_text
+    - identity_document_content
+entitlements:
+  - customer
+  - documents
+token_budget_gbp: 12.0
+risk_tier: high
+cost_centre: CC-KYC-REVIEW

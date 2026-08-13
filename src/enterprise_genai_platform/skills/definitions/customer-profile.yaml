@@ -1,0 +1,12 @@
+name: customer-profile
+version: 1.0.0
+description: Retrieve the minimum masked synthetic customer and account information.
+owner: {team: customer-platform, contact: customer-platform@novabank.example}
+agent: customer
+model: {provider: mock, model: deterministic-router-v1, max_input_tokens: 2000, max_output_tokens: 500}
+allowed_tools: [customer.get_customer, customer.get_accounts]
+data_classification: confidential
+approval: {required_for: [unmasked-data], approver_role: privacy.approver}
+slo: {availability_percent: 99.9, latency_p95_ms: 2000}
+evaluation: {suite: customer-profile-v1, minimum_score: 0.95}
+governance_state: approved
