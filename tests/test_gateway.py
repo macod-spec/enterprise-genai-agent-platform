@@ -2,13 +2,19 @@
 
 import json
 import logging
+import time
+from types import SimpleNamespace
+from typing import Any
 
+import jwt
 import pytest
+from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
 from enterprise_genai_platform.gateway.app import create_app
 from enterprise_genai_platform.gateway.config import Settings
+from enterprise_genai_platform.gateway.jwt_identity import EntraIdentityResolver
 from enterprise_genai_platform.gateway.logging import JsonFormatter, redact
 
 
@@ -21,6 +27,34 @@ def settings(**overrides: object) -> Settings:
     }
     values.update(overrides)
     return Settings.model_validate(values)
+
+
+# JWT-mode gateway tests (below) exercise the full app wired for production
+# identity, using a synthetic keypair -- see tests/test_jwt_identity.py for
+# the resolver's own unit tests and why this split matches every other
+# "requires real cloud setup" gate in this project.
+_JWT_ISSUER = "https://login.microsoftonline.com/11111111-1111-1111-1111-111111111111/v2.0"
+_JWT_AUDIENCE = "api://novabank-agent-platform"
+_JWT_PRIVATE_KEY = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+_JWT_PUBLIC_KEY = _JWT_PRIVATE_KEY.public_key()
+
+
+def _stub_signing_key_resolver(_token: str) -> Any:
+    return SimpleNamespace(key=_JWT_PUBLIC_KEY)
+
+
+def _issue_jwt(*, roles: list[str], subject: str = "alice@novabank.example") -> str:
+    now = int(time.time())
+    claims = {
+        "iss": _JWT_ISSUER,
+        "aud": _JWT_AUDIENCE,
+        "sub": "oid-alice-1234",
+        "preferred_username": subject,
+        "iat": now,
+        "exp": now + 3600,
+        "roles": roles,
+    }
+    return jwt.encode(claims, _JWT_PRIVATE_KEY, algorithm="RS256")
 
 
 def test_health_endpoints_are_public_and_secure() -> None:
@@ -178,6 +212,96 @@ def test_local_headers_are_rejected_outside_local_or_test() -> None:
     assert response.status_code == 503
     assert client.get("/docs").status_code == 404
     assert client.get("/openapi.json").status_code == 404
+
+
+def test_jwt_configured_but_no_bearer_token_still_fails_closed() -> None:
+    """A client sending X-Local-Tenant with no Authorization header must be
+    rejected outright, not silently fall back to trusting the header."""
+    app = create_app(
+        settings(
+            app_env="development",
+            jwt_jwks_uri="https://login.microsoftonline.com/test/discovery/v2.0/keys",
+            jwt_issuer=_JWT_ISSUER,
+            jwt_audience=_JWT_AUDIENCE,
+        )
+    )
+    app.state.jwt_identity_resolver = EntraIdentityResolver(
+        jwks_uri="https://login.microsoftonline.com/test/discovery/v2.0/keys",
+        issuer=_JWT_ISSUER,
+        audience=_JWT_AUDIENCE,
+        registry=app.state.tenant_registry,
+        signing_key_resolver=_stub_signing_key_resolver,
+    )
+    client = TestClient(app)
+
+    response = client.get("/api/v1/skills", headers={"X-Local-Tenant": "payment-disputes"})
+
+    assert response.status_code == 401
+
+
+def test_jwt_mode_ignores_a_client_supplied_tenant_header_entirely() -> None:
+    """The regression this whole feature exists to fix: a client-controlled
+    X-Local-Tenant header must have zero influence once JWT mode is active
+    -- only a validated token's role claim may decide the tenant. The token
+    below claims kyc-review; the header claims payment-disputes. If the
+    header won any influence at all, this would return payment-disputes'
+    two skills instead of kyc-review's one."""
+    app = create_app(
+        settings(
+            app_env="development",
+            jwt_jwks_uri="https://login.microsoftonline.com/test/discovery/v2.0/keys",
+            jwt_issuer=_JWT_ISSUER,
+            jwt_audience=_JWT_AUDIENCE,
+        )
+    )
+    app.state.jwt_identity_resolver = EntraIdentityResolver(
+        jwks_uri="https://login.microsoftonline.com/test/discovery/v2.0/keys",
+        issuer=_JWT_ISSUER,
+        audience=_JWT_AUDIENCE,
+        registry=app.state.tenant_registry,
+        signing_key_resolver=_stub_signing_key_resolver,
+    )
+    client = TestClient(app)
+    token = _issue_jwt(roles=["platform.viewer", "kyc-review"])
+
+    response = client.get(
+        "/api/v1/skills",
+        headers={
+            "Authorization": f"Bearer {token}",
+            # A caller attempting exactly the impersonation this feature
+            # closes: claim to be a different tenant via the old header.
+            "X-Local-Tenant": "payment-disputes",
+        },
+    )
+
+    assert response.status_code == 200
+    assert {skill["name"] for skill in response.json()["skills"]} == {"customer-profile"}
+
+
+def test_jwt_mode_rejects_a_tampered_token() -> None:
+    app = create_app(
+        settings(
+            app_env="development",
+            jwt_jwks_uri="https://login.microsoftonline.com/test/discovery/v2.0/keys",
+            jwt_issuer=_JWT_ISSUER,
+            jwt_audience=_JWT_AUDIENCE,
+        )
+    )
+    app.state.jwt_identity_resolver = EntraIdentityResolver(
+        jwks_uri="https://login.microsoftonline.com/test/discovery/v2.0/keys",
+        issuer=_JWT_ISSUER,
+        audience=_JWT_AUDIENCE,
+        registry=app.state.tenant_registry,
+        signing_key_resolver=_stub_signing_key_resolver,
+    )
+    client = TestClient(app)
+    token = _issue_jwt(roles=["kyc-review"])
+
+    response = client.get(
+        "/api/v1/skills", headers={"Authorization": f"Bearer {token}not-the-real-signature"}
+    )
+
+    assert response.status_code == 401
 
 
 def test_request_body_limit_is_enforced_before_route_handling() -> None:

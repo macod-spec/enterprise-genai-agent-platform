@@ -26,17 +26,75 @@ them.
 ### Tenant identity source
 
 Tenant identity is resolved exactly once, at the gateway edge
-(`gateway/auth.py:get_tenant_context`), from an `X-Local-Tenant` header —
-the same local-identity trust model this codebase already uses for
-`X-Local-User`/`X-Local-Roles` (`get_principal`), gated to `local`/`test`
-`APP_ENV` and returning 503 elsewhere. This is explicitly not a real JWT
-tenant claim: the codebase has no JWT validation infrastructure at all, and
-shipping a half-verified one to look more finished would be worse than an
-honestly-scoped local mechanism with a clear pre-production gate, consistent
-with how the rest of auth in this platform is already gated. Real tenant
-claims from verified Entra tokens remain a mandatory pre-production
-requirement (`docs/portfolio/limitations.md`), same as caller identity
-generally.
+(`gateway/auth.py:get_tenant_context`), and never from the request body, a
+query parameter, or anything else client-controllable within a request. Two
+sources, by environment:
+
+- **`local`/`test`**: an `X-Local-Tenant` header, the same local-identity
+  trust model this codebase already uses for `X-Local-User`/`X-Local-Roles`
+  (`get_principal`). Unchanged by this ADR's later revision (below) — local
+  developer experience and the existing test suite were not touched.
+- **Every other environment**: a verified Entra-issued RS256 JWT
+  (`gateway/jwt_identity.py`), required by `Settings` in `staging`/
+  `production` the same way a non-SQLite state backend already is.
+  `X-Local-Tenant` has no effect at all once JWT settings are configured —
+  see "Real tenant identity" below.
+
+This ADR originally shipped with tenant resolution local-header-trusted in
+*every* non-`local`/`test` environment too (returning 503, not trusting the
+header there either, but with no real alternative). That was flagged during
+review as the one real hole in the isolation story: every mechanism below
+this section correctly isolates tenants from each other once a tenant is
+decided, but a header-trusted decision doesn't stop a caller from deciding
+to be a tenant it isn't. The "Real tenant identity" section was added to
+close that specific gap, not to relitigate anything else in this ADR.
+
+### Real tenant identity (Entra JWT)
+
+`gateway/jwt_identity.py`'s `EntraIdentityResolver` resolves **both** caller
+identity and tenant from one verified token, not two independent checks — a
+real Entra deployment would never trust identity from one place and tenant
+from another. Signing keys are fetched from the issuer's JWKS endpoint and
+selected by the token's `kid` header (`jwt.PyJWKClient`, which also caches),
+not a single pinned key — Entra rotates its signing keys routinely, and the
+static-key pattern `mcp_boundary/remote_auth.py` uses for the narrower
+remote-MCP-transport case would silently start rejecting every token the
+day Entra rotates.
+
+Entra has no native "business tenant" concept distinct from the Entra
+directory tenant (`tid`), so this platform's tenant is carried as an Entra
+App Role: the `roles` claim's values that happen to match a name already
+declared in `config/tenants/*.yaml` identify the tenant; every other value
+in the same claim is a platform capability role, identical in meaning to
+the existing `X-Local-Roles` vocabulary (`agent.invoke`, `platform.viewer`,
+...). A token must carry **exactly one** tenant-matching role — zero or
+more than one fails closed, the same "don't guess on an ambiguous claim"
+principle the rest of this ADR applies to retrieval and state.
+
+`get_principal` and `get_tenant_context` share one verified decode per
+request (cached on `request.state`, not re-verified) rather than trusting
+the header and the token independently — there is no code path where a
+caller can supply a valid token for identity and a header for tenant and
+have the header win any influence at all.
+
+Verified against a synthetic RS256 keypair and a stubbed signing-key lookup
+(`tests/test_jwt_identity.py`: valid token, wrong signing key, expired,
+wrong issuer, wrong audience, zero tenant roles, two tenant roles, missing
+subject claim — nine cases), plus a full-gateway test
+(`tests/test_gateway.py::test_jwt_mode_ignores_a_client_supplied_tenant_header_entirely`)
+that issues a token claiming `kyc-review` alongside a header claiming
+`payment-disputes` and confirms only the token's claim has any effect —
+confirmed to genuinely fail against the pre-fix code (by temporarily
+reintroducing a header-override read) before the fix was verified to pass,
+not written directly against working code. Not yet live-verified against a
+real Entra tenant: that needs a real App Registration with App Roles
+defined and assigned to real users, a separate Azure AD administrative
+decision, matching how every other "requires real cloud setup" gate in this
+project has been sequenced (implement, verify locally against a faithful
+substitute, live-verify separately once that setup exists — see
+`docs/portfolio/live-verification.md`). The live Container Apps demo
+endpoint still runs `APP_ENV=local` and therefore still uses the header
+path until that setup exists and the deployment is switched over.
 
 Resolution happens once and produces an immutable `TenantContext` (tenant
 name plus its `TenantBundle`), threaded explicitly through every call site
@@ -170,23 +228,19 @@ tenants.json` breaks all of these down by tenant.
   state, retrieve another tenant's documents (even when the top semantic
   match), exhaust another tenant's budget, see another tenant's metrics, or
   invoke a skill scoped to another tenant — the six things the design was
-  required to prove, not just the easy ones. This is proven **given each
-  caller's tenant claim is honest** — see the next bullet for why that
-  qualifier is load-bearing, not boilerplate.
+  required to prove, not just the easy ones.
 - Onboarding a tenant is genuinely a config-only change, mechanically
   enforced by CI, not just true by convention today.
-- **Tenant identity is claimed, not verified — this is the one real gap in
-  the isolation story.** `X-Local-Tenant` is a client-supplied header with
-  nothing checking it against the caller's actual identity. Every
-  isolation mechanism this ADR describes (RLS, retrieval filtering,
-  budget, metrics) sits underneath that header and only isolates tenants
-  from each other correctly once a tenant has been decided — it does
-  nothing to stop a caller from deciding to be a tenant it isn't. Local/
-  test-only gating (503 outside `local`/`test`) bounds *where* this is
-  true, not *whether* it's true within that scope. Closing this means
-  resolving tenant from a verified Entra JWT claim instead of a header —
-  see "What was deliberately not isolated" below; this is the top
-  remaining item, ahead of everything else queued for this platform.
+- **Tenant identity is now verified, not merely claimed, outside
+  `local`/`test`.** This was originally the one real gap in the isolation
+  story: `X-Local-Tenant` was a client-supplied header with nothing
+  checking it against the caller's actual identity, so every isolation
+  mechanism above only isolated tenants from each other correctly once a
+  tenant had been decided — none of it stopped a caller from deciding to
+  be a tenant it isn't. Closed by resolving tenant from a verified Entra
+  JWT claim instead of the header ("Real tenant identity" above); see
+  `docs/portfolio/limitations.md` for what's verified locally versus what
+  still needs a real Entra tenant to be true end-to-end.
 
 ## What was deliberately not isolated, and why
 
@@ -209,14 +263,13 @@ tenants.json` breaks all of these down by tenant.
   worth the cardinality cost for what they are used for today. This is a
   narrower claim than "everything is tenant-labelled" and is stated as such
   here rather than left to be discovered as a gap.
-- **Real JWT-verified tenant claims.** Tenant resolution is local-identity
-  trust, the same mechanism as caller identity generally
-  (`docs/portfolio/limitations.md`), but the consequence is more severe here
-  than "not yet production-grade": every isolation guarantee in this ADR is
-  conditional on the tenant claim being honest, so this is not one
-  pre-production item among several — it is the precondition the rest of
-  the document's claims depend on, and the next thing to fix, not a
-  generic backlog entry.
+- **Live Entra verification.** JWT-based tenant resolution is implemented
+  and locally verified (synthetic keypair, stubbed signing-key lookup) but
+  not yet exercised against a real Entra tenant — that needs a real App
+  Registration with App Roles assigned to real users, a separate Azure AD
+  administrative decision. The live Container Apps demo endpoint still runs
+  `APP_ENV=local` and therefore still uses the header path until that setup
+  exists. See "Real tenant identity (Entra JWT)" above.
 - **Durable, cross-replica budget ledgers.** `TenantBudgetPolicy` is
   in-process, same limitation already recorded for the model gateway
   (ADR-006) before this work; multi-tenancy inherits it rather than fixing
@@ -255,3 +308,12 @@ against the running gateway: correctly scoped skill list, successful
 tenant-scoped investigation, and automatic appearance in the browser demo's
 tenant selector — all without a code change, which is the actual claim this
 ADR makes, verified directly rather than inferred from the design.
+`tests/test_jwt_identity.py` — nine tests against a synthetic RS256
+keypair: valid token, wrong signing key, expired, wrong issuer, wrong
+audience, zero tenant roles, two tenant roles, missing `preferred_username`
+falling back to `oid`, and constructor validation.
+`tests/test_gateway.py::test_jwt_mode_ignores_a_client_supplied_tenant_header_entirely`
+— full-gateway proof that `X-Local-Tenant` has zero influence once JWT
+settings are configured, confirmed genuinely red (by temporarily
+reintroducing a header-override read and watching the test catch it)
+before being confirmed green against the real fix.

@@ -3,48 +3,98 @@
 import time
 from collections import defaultdict, deque
 from collections.abc import Callable
-from dataclasses import dataclass
 from typing import Annotated, cast
 
 from fastapi import Depends, Header, HTTPException, Request, status
 
 from enterprise_genai_platform.gateway.config import Settings
+from enterprise_genai_platform.gateway.jwt_identity import (
+    EntraIdentityResolver,
+    JwtIdentity,
+    JwtIdentityError,
+)
+from enterprise_genai_platform.gateway.principal import Principal
 from enterprise_genai_platform.tenancy.context import TenantContext
 from enterprise_genai_platform.tenancy.registry import TenantRegistry, UnknownTenantError
 
-
-@dataclass(frozen=True, slots=True)
-class Principal:
-    """Authenticated caller identity supplied to agent platform services."""
-
-    subject: str
-    roles: frozenset[str]
+__all__ = [
+    "AuthenticatedPrincipal",
+    "InMemoryRateLimiter",
+    "Principal",
+    "TenantScoped",
+    "enforce_demo_rate_limit",
+    "enforce_rate_limit",
+    "get_principal",
+    "get_tenant_context",
+    "require_roles",
+]
 
 
 def _settings(request: Request) -> Settings:
     return cast(Settings, request.app.state.settings)
 
 
+def _jwt_configured(settings: Settings) -> bool:
+    return bool(settings.jwt_jwks_uri and settings.jwt_issuer and settings.jwt_audience)
+
+
+def _resolve_jwt_bearer(request: Request, authorization: str | None) -> None:
+    """Verify the bearer token and cache (principal, tenant) on request.state.
+
+    Cached rather than re-decoded: get_tenant_context depends on
+    get_principal (below) and must not re-verify the same token a second
+    time within one request.
+    """
+    if authorization is None or not authorization.startswith("Bearer "):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="A Bearer token is required",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    token = authorization.removeprefix("Bearer ").strip()
+    resolver: EntraIdentityResolver = request.app.state.jwt_identity_resolver
+    try:
+        identity = resolver.resolve(token)
+    except JwtIdentityError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=str(exc),
+            headers={"WWW-Authenticate": "Bearer"},
+        ) from exc
+    request.state.jwt_identity = identity
+
+
 def get_principal(
     request: Request,
     user: str | None = Header(default=None, alias="X-Local-User"),
     roles: str = Header(default="", alias="X-Local-Roles"),
+    authorization: str | None = Header(default=None),
 ) -> Principal:
-    """Authenticate a local caller; production identity will use verified Entra tokens."""
+    """Authenticate the caller.
+
+    local/test: the X-Local-* header mechanism, unchanged. Every other
+    environment: a verified Entra-issued Bearer JWT
+    (gateway/jwt_identity.py) if JWT settings are configured, else the same
+    fail-closed 503 this endpoint has always returned outside local/test.
+    """
     settings = _settings(request)
-    if settings.app_env not in {"local", "test"}:
+    if settings.app_env in {"local", "test"}:
+        if user is None or not user.strip():
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Local identity header is required",
+                headers={"WWW-Authenticate": "Local"},
+            )
+        normalized_roles = frozenset(role.strip() for role in roles.split(",") if role.strip())
+        return Principal(subject=user.strip(), roles=normalized_roles)
+    if not _jwt_configured(settings):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Production identity provider is not configured",
         )
-    if user is None or not user.strip():
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Local identity header is required",
-            headers={"WWW-Authenticate": "Local"},
-        )
-    normalized_roles = frozenset(role.strip() for role in roles.split(",") if role.strip())
-    return Principal(subject=user.strip(), roles=normalized_roles)
+    _resolve_jwt_bearer(request, authorization)
+    identity: JwtIdentity = request.state.jwt_identity
+    return identity.principal
 
 
 AuthenticatedPrincipal = Annotated[Principal, Depends(get_principal)]
@@ -57,33 +107,42 @@ def get_tenant_context(
 ) -> TenantContext:
     """Resolve tenant exactly once, at the gateway edge, from the caller's
     authenticated identity — never from the request body, a query
-    parameter, or anything else client-controllable. This uses the same
-    trusted local-identity mechanism as get_principal (X-Local-Tenant,
-    local/test only) rather than a real JWT claim: this codebase has no JWT
-    validation infrastructure at all, and shipping a half-verified one would
-    be worse than an honestly-scoped local mechanism. Real JWT-based tenant
-    claims remain a pre-production gate, same as the rest of auth.
+    parameter, or anything else client-controllable.
+
+    local/test: X-Local-Tenant, unchanged (this header has no meaning
+    outside those two environments — see below). Every other environment:
+    the tenant claim from the same verified Entra JWT get_principal already
+    validated for this request, via gateway/jwt_identity.py. X-Local-Tenant
+    is not read at all in that branch; a client cannot influence tenant
+    resolution by setting it, only a validated App Role claim can.
 
     _principal is required (not just imported) so tenant resolution always
-    runs after identity authentication, never before or independently of it.
+    runs after identity authentication, never before or independently of
+    it — and, in JWT mode, so get_principal has already populated
+    request.state.jwt_identity by the time this function's body runs.
     """
     settings = _settings(request)
-    if settings.app_env not in {"local", "test"}:
+    if settings.app_env in {"local", "test"}:
+        if tenant is None or not tenant.strip():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="X-Local-Tenant header is required",
+            )
+        registry: TenantRegistry = request.app.state.tenant_registry
+        try:
+            bundle = registry.get(tenant.strip())
+        except UnknownTenantError as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        return TenantContext(tenant=tenant.strip(), bundle=bundle)
+    if not _jwt_configured(settings):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Production identity provider is not configured",
         )
-    if tenant is None or not tenant.strip():
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="X-Local-Tenant header is required",
-        )
-    registry: TenantRegistry = request.app.state.tenant_registry
-    try:
-        bundle = registry.get(tenant.strip())
-    except UnknownTenantError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    return TenantContext(tenant=tenant.strip(), bundle=bundle)
+    identity: JwtIdentity = request.state.jwt_identity
+    registry = request.app.state.tenant_registry
+    bundle = registry.get(identity.tenant)
+    return TenantContext(tenant=identity.tenant, bundle=bundle)
 
 
 TenantScoped = Annotated[TenantContext, Depends(get_tenant_context)]

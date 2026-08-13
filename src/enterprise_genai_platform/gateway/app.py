@@ -21,6 +21,7 @@ from enterprise_genai_platform.gateway.auth import (
     require_roles,
 )
 from enterprise_genai_platform.gateway.config import Settings, get_settings
+from enterprise_genai_platform.gateway.jwt_identity import EntraIdentityResolver
 from enterprise_genai_platform.gateway.logging import configure_logging
 from enterprise_genai_platform.gateway.middleware import RequestSecurityMiddleware
 from enterprise_genai_platform.gateway.models import (
@@ -104,6 +105,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     app.state.skill_registry = build_default_skill_registry()
     app.state.tenant_registry = build_default_tenant_registry()
+    if (
+        runtime_settings.jwt_jwks_uri
+        and runtime_settings.jwt_issuer
+        and runtime_settings.jwt_audience
+    ):
+        app.state.jwt_identity_resolver = EntraIdentityResolver(
+            jwks_uri=runtime_settings.jwt_jwks_uri,
+            issuer=runtime_settings.jwt_issuer,
+            audience=runtime_settings.jwt_audience,
+            registry=app.state.tenant_registry,
+            tenant_claim=runtime_settings.jwt_tenant_claim,
+        )
     connection_url = (
         runtime_settings.state_connection_url.get_secret_value()
         if runtime_settings.state_connection_url

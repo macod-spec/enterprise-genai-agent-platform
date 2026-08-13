@@ -64,6 +64,10 @@ class Settings(BaseSettings):
     otel_export_enabled: bool = False
     otel_exporter_otlp_endpoint: str = "http://127.0.0.1:4317"
     metrics_enabled: bool = True
+    jwt_jwks_uri: str | None = None
+    jwt_issuer: str | None = None
+    jwt_audience: str | None = None
+    jwt_tenant_claim: str = Field(default="roles", min_length=1)
 
     @model_validator(mode="after")
     def validate_security_boundaries(self) -> "Settings":
@@ -76,6 +80,14 @@ class Settings(BaseSettings):
             raise ValueError("STATE_CONNECTION_URL is required for PostgreSQL or Redis")
         if self.app_env in {"staging", "production"} and self.state_backend == "sqlite":
             raise ValueError("SQLite state is not permitted in staging or production")
+        if self.app_env in {"staging", "production"} and not (
+            self.jwt_jwks_uri and self.jwt_issuer and self.jwt_audience
+        ):
+            raise ValueError(
+                "JWT_JWKS_URI, JWT_ISSUER, and JWT_AUDIENCE are all required in staging "
+                "or production — local-header identity (X-Local-User/X-Local-Tenant) is "
+                "local/test only"
+            )
         if self.model_gateway_provider == "azure_openai" and not self.azure_openai_endpoint:
             raise ValueError(
                 "AZURE_OPENAI_ENDPOINT is required when MODEL_GATEWAY_PROVIDER=azure_openai"
