@@ -34,6 +34,14 @@ az containerapp env show --name "${environment_name}" --resource-group "${resour
     --logs-workspace-id "${law_id}" \
     --logs-workspace-key "${law_key}"
 
+# Revision suffix must be unique across this app's entire revision history,
+# not just its currently-active revisions -- Azure refuses to reuse one even
+# after the revision that held it is inactive. Derived from the image
+# digest rather than fixed: re-running with the same digest converges on
+# the same revision (genuinely idempotent), and a new digest always gets a
+# fresh, non-colliding suffix.
+revision_suffix="img-$(echo "${image_digest#sha256:}" | cut -c1-16)"
+
 # Note: APP_ENV=local is required, not a shortcut. The gateway's local
 # identity headers (X-Local-User/X-Local-Roles) are the only auth mechanism
 # implemented; any other app_env makes every authenticated route return 503
@@ -69,7 +77,7 @@ az containerapp create \
     RAG_PROVIDER=azure_search \
     "AZURE_SEARCH_ENDPOINT=https://${search_service}.search.windows.net" \
     "RAG_SYNTHESIS_MODEL=${model_deployment}" \
-  --revision-suffix reconcile
+  --revision-suffix "${revision_suffix}"
 
 principal_id="$(az containerapp show --name "${app_name}" --resource-group "${resource_group}" --query identity.principalId --output tsv)"
 acr_id="$(az acr show --name "${acr_name}" --query id --output tsv)"
