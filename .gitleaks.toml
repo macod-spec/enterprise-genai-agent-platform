@@ -7,3 +7,44 @@ regexes = [
   '''@example\.test''',
   '''I_ACCEPT_AZURE_COSTS'''
 ]
+
+# The two rules below block specific, known-exposed Azure identifiers from
+# ever being reintroduced. They are literal-value matches, not a generic
+# GUID rule: this codebase already uses UUIDs throughout (approval_id,
+# request_id, chunk provenance), so a generic GUID pattern would be all
+# false positives. If either identifier is rotated, update the literal here.
+[[rules]]
+id = "azure-subscription-id-known-exposed"
+description = "Known-exposed Azure subscription ID must never reappear"
+regex = '''5677d45c-bce1-4375-ba74-7443b6a2a74c'''
+tags = ["azure", "subscription-id"]
+
+[[rules]]
+id = "azure-tenant-id-known-exposed"
+description = "Known-exposed Azure tenant ID must never reappear"
+regex = '''04ed1ea3-6db7-4f0d-8551-cf860495341d'''
+tags = ["azure", "tenant-id"]
+
+# Public IPv4 literal. Octet-range-bounded (0-255 per octet, not a bare
+# \d{1,3}) and boundary-guarded (the char immediately before/after the
+# match must not itself be a digit or dot) specifically so this does not
+# false-positive on dotted version strings or hash fragments that merely
+# contain four digit groups, e.g. "6.0.12.20260724" or a sha256 substring.
+# secretGroup = 1 reports only the IP itself, not the boundary character.
+[[rules]]
+id = "public-ipv4-literal"
+description = "Public IPv4 literal; private ranges and loopback are allowlisted"
+regex = '''(?:^|[^0-9.])((?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?))(?:$|[^0-9])'''
+secretGroup = 1
+tags = ["network", "ip-address"]
+
+  [rules.allowlist]
+  description = "RFC1918 private ranges, loopback, and the unspecified address"
+  regexTarget = "secret"
+  regexes = [
+    '''^10\.''',
+    '''^172\.(1[6-9]|2[0-9]|3[01])\.''',
+    '''^192\.168\.''',
+    '''^127\.''',
+    '''^0\.0\.0\.0$'''
+  ]
