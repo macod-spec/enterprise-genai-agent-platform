@@ -198,6 +198,31 @@
   blocker.
 - In progress: the partially created Azure sandbox is billable and is not yet
   application-ready.
+- Completed locally: multi-tenancy isolation (ADR-015) — tenant config bundles
+  (`config/tenants/*.yaml`), Postgres RLS with `FORCE ROW LEVEL SECURITY` and
+  transaction-scoped `set_config` (a real RLS-bypass bug, connecting as the
+  Postgres superuser, was caught and fixed by the integration test written
+  for exactly this), tenant-scoped Redis/SQLite state, entitlement-filtered
+  RAG retrieval reusing the existing role-filter mechanism unchanged, per-
+  tenant model-gateway budgets, tenant-labelled metrics and a Grafana
+  dashboard, and a CI-enforced zero-code onboarding rule
+  (`scripts/check-tenant-drift.sh`). Proven by a six-point cross-tenant
+  leakage test suite written and confirmed failing before the
+  implementation existed, and by adding a fourth tenant as a single YAML
+  file with zero application-code changes, verified working end-to-end.
+  `docs/governance/strategy.md` records the commercial framing this closes
+  out: the platform's product is the shared isolation/governance substrate,
+  not any one team's agent.
+- Also, separately: rotated out an exposed Azure subscription ID and tenant
+  ID that had been committed across several earlier commits by squashing
+  history to a single fresh commit (the values were already public; this
+  stops further propagation, not the original exposure), added custom
+  Gitleaks rules verified firing in CI to block recurrence, dropped the
+  Container Apps demo's IP allowlist in favour of gateway auth plus a
+  per-tenant budget (a rotating home IP was an operational-leak surface for
+  no real security benefit), and added rate limiting to the two browser
+  demo routes, which had none — a real gap found while auditing the IP
+  allowlist removal, not a hypothetical one.
 - Pre-production: Entra identity, durable PostgreSQL/Redis state, remote MCP auth,
   managed secrets, load/failure tests and external penetration test.
 - Production readiness: DR exercise, SLO baselines, on-call ownership, privacy and

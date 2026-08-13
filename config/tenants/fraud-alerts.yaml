@@ -1,0 +1,32 @@
+# Onboarding a new tenant is adding a file here — nothing else. Platform
+# code must never reference "fraud-alerts" by name (enforced in CI by
+# scripts/check-tenant-drift.sh); it only ever reads this bundle through the
+# tenancy registry, resolved from the caller's authenticated tenant claim.
+#
+# This bundle was added to verify the zero-code onboarding path end-to-end:
+# see docs/adrs/016-multi-tenancy-isolation.md for what was checked.
+name: fraud-alerts
+system_prompt: >
+  You investigate synthetic fraud alerts for NovaBank. Cite evidence for
+  every claim. Never freeze an account, reverse a transaction, or contact
+  the customer directly — recommend and route to human approval.
+allowed_skills:
+  - payment-investigation
+  - customer-profile
+model_tier: strong
+memory_policy:
+  approval_state_ttl_days: 14
+  persists:
+    - approval_id
+    - request_id
+    - query_sha256
+    - status
+  does_not_persist:
+    - raw_query_text
+    - customer_pii
+entitlements:
+  - transactions
+  - customer
+token_budget_gbp: 10.0
+risk_tier: high
+cost_centre: CC-FRAUD-ALERTS
