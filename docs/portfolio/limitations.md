@@ -64,25 +64,36 @@ not represented as a live production banking system.
   between sessions rather than left running. The Kubernetes ingress path
   this would eventually be replaced by (a single nginx controller,
   cert-manager TLS, host-based routing) has not been built yet.
-- **Tenant identity is not yet enforced, only isolated once claimed.**
-  `X-Local-Tenant` is a client-supplied header, not a verified claim: any
-  caller that can reach the endpoint can set it to `payment-disputes`,
-  `complaints-triage`, `kyc-review`, or `fraud-alerts` and receive that
-  tenant's correctly-scoped results, whether or not they have any actual
-  relationship to that tenant. Every isolation control this platform builds
-  — RLS, retrieval entitlement filtering, per-tenant budget, tenant-labelled
-  metrics — sits underneath that header and is only as trustworthy as it
-  is. `tests/test_tenancy_leakage.py` proves tenant A cannot see tenant B's
-  data *given each caller's tenant claim is honest*; it does not, and
-  cannot, prove a caller can't lie about which tenant it is, because
-  nothing currently checks. This is the same local-identity-header
-  limitation as caller identity generally (see above), but it is called out
-  separately here because it is the direct precondition for every
-  multi-tenancy claim in `docs/adrs/015-multi-tenancy-isolation.md` and the
-  evidence matrix — tenant isolation should be read as **designed and
-  locally proven under a trusted-claim assumption**, not as **enforced
-  end-to-end**, until tenant resolution comes from a verified Entra JWT
-  claim instead of this header.
+- **Tenant identity: real JWT verification is implemented, not yet live
+  against a real Entra tenant.** `X-Local-Tenant` was previously a
+  client-supplied header with nothing checking it against the caller's
+  real identity — any caller could claim any tenant and receive its
+  correctly-scoped results. That gap is closed in code
+  (`gateway/jwt_identity.py`): outside `local`/`test`, both caller identity
+  and tenant are resolved from one verified Entra-issued RS256 JWT (signing
+  key fetched from the issuer's JWKS by `kid`, not a pinned key, so it
+  survives Entra's routine key rotation), with the tenant carried as an
+  Entra App Role that must match exactly one name in
+  `config/tenants/*.yaml` — zero or more than one match fails closed.
+  `X-Local-Tenant` is not read at all once JWT settings are configured; a
+  new test (`test_jwt_mode_ignores_a_client_supplied_tenant_header_entirely`)
+  proves this directly — it sends a token claiming `kyc-review` alongside a
+  header claiming `payment-disputes` and confirms the header has zero
+  effect — and was confirmed to genuinely fail against the pre-fix
+  behavior before the fix landed, not just written to pass. `Settings` now
+  hard-requires `JWT_JWKS_URI`/`JWT_ISSUER`/`JWT_AUDIENCE` in `staging` and
+  `production`, the same way it already hard-requires a non-SQLite state
+  backend there.
+
+  What's still open: this is verified against a synthetic RS256 keypair and
+  a stubbed signing-key lookup (`tests/test_jwt_identity.py`,
+  `tests/test_gateway.py`), not a real Entra tenant — that needs a real App
+  Registration with App Roles defined and assigned to real users, a
+  separate Azure AD administrative decision, and the live demo endpoint
+  still runs `APP_ENV=local` (so it still uses the header path) until that
+  setup exists and the deployment is switched over. Caller identity beyond
+  tenant (e.g. fine-grained platform-role governance across a real user
+  population) remains otherwise as described for local identity generally.
 
 ## Mandatory production gates
 

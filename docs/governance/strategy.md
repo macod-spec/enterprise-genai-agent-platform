@@ -48,29 +48,25 @@ infrastructure economics:
 
 ## Three horizons
 
-**Now — proven locally, one real gap named plainly.** Isolation *between*
-tenants is proven — given each caller's tenant claim is honest (state,
-retrieval, quota, metrics; see the evidence matrix and
-`docs/adrs/015-multi-tenancy-isolation.md`). It is not yet *enforced*
-against a dishonest one: `X-Local-Tenant` is a client-supplied header with
-nothing checking it against the caller's real identity, so every isolation
-mechanism above sits on top of an unverified claim today. This is not in
-the same category as the other current gaps — an AKS apply is a cost
-decision awaiting sign-off, this is a security gap awaiting an afternoon of
-work — and it is the immediate next item, ahead of everything else,
-specifically because closing it converts the platform's central claim from
-designed to enforced.
+**Now — proven locally, including the identity boundary.** Isolation
+between tenants is proven (state, retrieval, quota, metrics; see the
+evidence matrix and `docs/adrs/015-multi-tenancy-isolation.md`), and as of
+this horizon that proof no longer rests on a client-supplied header:
+outside `local`/`test`, tenant is resolved from a verified Entra-issued JWT
+(`gateway/jwt_identity.py`), with `X-Local-Tenant` having no effect once
+JWT settings are configured. Verified against a synthetic RS256 keypair —
+not yet a real Entra tenant, which needs a real App Registration with App
+Roles assigned to real users, a separate Azure AD administrative decision.
+The live Container Apps demo still runs `APP_ENV=local` (header path) until
+that setup exists.
 
-**Next — real identity, then real usage.** Two separate steps, in order.
-First: resolve tenant from a verified Entra JWT claim instead of the local
-header — the RS256 JWT validation infrastructure already exists in this
-codebase for remote MCP auth (`mcp_boundary/remote_auth.py`), so this is
-extension, not a build-from-nothing. Second, once that's closed: move one
-real, low-stakes internal use case onto the platform under the existing
-isolation model, with AKS as the deployment target instead of the
-Container Apps demo path. That second step is the one that turns "the
-isolation model is proven" into "a real team is trusting it" — but it
-should not happen before the first.
+**Next — real usage, on real infrastructure.** With the identity boundary
+closed, the remaining step is exercising it for real: move one real,
+low-stakes internal use case onto the platform under the existing
+isolation model, with a real Entra App Registration (turning the JWT path
+from locally-verified to live) and AKS as the deployment target instead of
+the Container Apps demo path. This is the step that turns "the isolation
+model is proven" into "a real team is trusting it."
 
 **Later — self-service onboarding at the rate the config-file model
 implies.** If onboarding truly stays a config change, the constraint on

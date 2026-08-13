@@ -1,7 +1,7 @@
 """Persistent human-approval state tests."""
 
 import pytest
-from pydantic import ValidationError
+from pydantic import SecretStr, ValidationError
 
 from enterprise_genai_platform.gateway.config import Settings
 from enterprise_genai_platform.state import SQLiteApprovalStore
@@ -78,6 +78,20 @@ def test_remote_backend_requires_connection_url() -> None:
 def test_production_rejects_sqlite_state() -> None:
     with pytest.raises(ValidationError, match="SQLite state"):
         Settings(app_env="production")
+
+
+def test_production_rejects_missing_jwt_settings() -> None:
+    """The local-header identity mechanism (X-Local-User/X-Local-Tenant) is
+    local/test only; staging and production must have real Entra JWT
+    settings configured, not silently fall back to a 503-everything gateway."""
+    with pytest.raises(ValidationError, match="JWT_JWKS_URI"):
+        Settings(
+            app_env="production",
+            state_backend="postgresql",
+            state_connection_url=SecretStr(
+                "postgres://user:pass@host/db"
+            ),  # pragma: allowlist secret
+        )
 
 
 def test_factory_builds_sqlite_and_rejects_missing_remote_url() -> None:
