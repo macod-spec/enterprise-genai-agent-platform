@@ -481,7 +481,9 @@ this form hiding options.</p>
         ) as exc:
             return _demo_page(f"<h2>Blocked</h2><p>{html.escape(str(exc))}</p>")
         report = app.state.groundedness_evaluator.evaluate(answer, evidence)
-        citation_items = "".join(f"<li>{html.escape(hit.citation)}</li>" for hit in evidence.hits)
+        citation_items = "".join(
+            f"<li>{html.escape(hit.citation.chunk_id)}</li>" for hit in evidence.hits
+        )
         answer_html = html.escape(answer) or (
             "<i>(the model returned no visible text — its response budget was "
             "spent on internal reasoning; see docs/portfolio/live-verification.md)</i>"

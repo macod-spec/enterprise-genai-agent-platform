@@ -311,3 +311,24 @@ def test_demo_pages_escape_user_supplied_text() -> None:
 
     assert response.status_code == 200
     assert "<script>alert(1)</script>" not in response.text
+
+
+def test_demo_rag_form_renders_citations_for_real_hits() -> None:
+    """Regression test: this route 500'd in production the first time it hit a
+    real backend with non-empty evidence.hits, because it called html.escape()
+    on the whole Citation object instead of its chunk_id string field. No test
+    exercised this path with real hits before — the mock/local-index tests
+    that did run never happened to produce any."""
+    app = create_app(settings())
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/v1/demo/rag",
+        data={
+            "query": "delayed faster payment acknowledgement escalation",
+            "tenant": "payment-disputes",
+        },
+    )
+
+    assert response.status_code == 200
+    assert "<li>POL-PAY-001" in response.text
