@@ -1,0 +1,16 @@
+{
+  "title": "Enterprise Agent Platform — Tenants",
+  "uid": "enterprise-agent-platform-tenants",
+  "description": "Per-tenant breakdown: config/tenants/*.yaml defines payment-disputes (CC-PAYMENTS-DISPUTES), complaints-triage (CC-COMPLAINTS-TRIAGE), and kyc-review (CC-KYC-REVIEW). Every panel here is grouped by the tenant label so one tenant's load or spend is never folded into another's; there is no unlabelled series in this platform's metrics.",
+  "schemaVersion": 39,
+  "refresh": "30s",
+  "panels": [
+    {"type":"timeseries","title":"Workflow completions by tenant","targets":[{"expr":"sum by (tenant) (rate(agent_platform_workflow_completions_total[5m]))","legendFormat":"{{tenant}}"}],"gridPos":{"h":8,"w":12,"x":0,"y":0}},
+    {"type":"timeseries","title":"Workflow p95 latency by tenant","targets":[{"expr":"histogram_quantile(0.95, sum by (tenant, le) (rate(agent_platform_workflow_duration_seconds_bucket[5m])))","legendFormat":"{{tenant}}"}],"gridPos":{"h":8,"w":12,"x":12,"y":0}},
+    {"type":"stat","title":"Pending approvals by tenant","targets":[{"expr":"agent_platform_pending_approvals","legendFormat":"{{tenant}}"}],"gridPos":{"h":8,"w":6,"x":0,"y":8}},
+    {"type":"timeseries","title":"Estimated model spend (GBP/s) by tenant","description":"Compare against each tenant's token_budget_gbp in config/tenants/*.yaml — this is the panel that would show a tenant approaching its own budget ceiling, never another tenant's.","targets":[{"expr":"sum by (tenant) (rate(agent_platform_model_estimated_cost_gbp_total[5m]))","legendFormat":"{{tenant}}"}],"gridPos":{"h":8,"w":9,"x":6,"y":8}},
+    {"type":"timeseries","title":"Model tokens by tenant","targets":[{"expr":"sum by (tenant) (rate(agent_platform_model_tokens_total[5m]))","legendFormat":"{{tenant}}"}],"gridPos":{"h":8,"w":9,"x":15,"y":8}},
+    {"type":"timeseries","title":"Model gateway calls by tenant and outcome","targets":[{"expr":"sum by (tenant, outcome) (rate(agent_platform_model_gateway_calls_total[5m]))","legendFormat":"{{tenant}} / {{outcome}}"}],"gridPos":{"h":8,"w":12,"x":0,"y":16}},
+    {"type":"timeseries","title":"Model gateway p95 latency by tenant","targets":[{"expr":"histogram_quantile(0.95, sum by (tenant, le) (rate(agent_platform_model_gateway_duration_seconds_bucket[5m])))","legendFormat":"{{tenant}}"}],"gridPos":{"h":8,"w":12,"x":12,"y":16}}
+  ]
+}

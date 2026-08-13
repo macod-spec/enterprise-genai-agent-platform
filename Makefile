@@ -1,4 +1,4 @@
-.PHONY: bootstrap run format lint typecheck test evaluate groundedness-evaluation reliability operator-demo operational-readiness portfolio-evidence portfolio-demo terraform-zero-plan azure-aks-preflight preproduction-readiness destroy audit secrets sast licenses lock-check check security container-security sign-image kind-integration durable-state-integration
+.PHONY: bootstrap run format lint typecheck test check-tenant-drift evaluate groundedness-evaluation reliability operator-demo operational-readiness portfolio-evidence portfolio-demo terraform-zero-plan azure-aks-preflight preproduction-readiness destroy audit secrets sast licenses lock-check check security container-security sign-image kind-integration durable-state-integration
 
 PYTHON := .venv/bin/python
 LOCAL_IMAGE := enterprise-genai-agent-platform:local
@@ -25,6 +25,9 @@ lint:
 
 typecheck:
 	.venv/bin/mypy src tests
+
+check-tenant-drift:
+	./scripts/check-tenant-drift.sh
 
 test:
 	$(PYTHON) -m pytest
@@ -85,7 +88,7 @@ lock-check:
 	UV_CACHE_DIR=$(SECURITY_REPORTS)/uv-cache .venv/bin/uv lock --check
 	$(PYTHON) -m pip check
 
-check: lint typecheck test
+check: lint typecheck check-tenant-drift test
 
 security: check evaluate groundedness-evaluation reliability operator-demo operational-readiness portfolio-evidence audit secrets lock-check licenses sast
 
